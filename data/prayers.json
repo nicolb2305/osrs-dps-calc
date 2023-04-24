@@ -1,0 +1,12 @@
+[
+    {
+        "name": "Piety",
+        "defence": 25,
+        "melee_accuracy": 20,
+        "melee_damage": 23,
+        "ranged_accuracy": 0,
+        "ranged_damage": 0,
+        "magic_accuracy": 0,
+        "magic_defence": 0
+    }
+]

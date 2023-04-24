@@ -1,0 +1,56 @@
+[
+    {
+        "name": "Abyssal whip",
+        "slot": "WeaponOneHanded",
+        "weapon_stats": {
+            "weapon_type": "Whip",
+            "attack_speed": 4,
+            "range": 1,
+            "two_handed": false
+        },
+        "attack": {
+            "stab": 0,
+            "slash": 82,
+            "crush": 0,
+            "ranged": 0,
+            "magic": 0
+        },
+        "defence": {
+            "stab": 0,
+            "slash": 0,
+            "crush": 0,
+            "ranged": 0,
+            "magic": 0
+        },
+        "damage": {
+            "strength": 82,
+            "ranged": 0,
+            "magic": 0
+        },
+        "prayer_bonus": 0
+    },
+    {
+        "name": "Dragon defender",
+        "slot": "Shield",
+        "attack": {
+            "stab": 25,
+            "slash": 24,
+            "crush": 23,
+            "ranged": -3,
+            "magic": -2
+        },
+        "defence": {
+            "stab": 25,
+            "slash": 24,
+            "crush": 23,
+            "ranged": -3,
+            "magic": -2
+        },
+        "damage": {
+            "strength": 6,
+            "ranged": 0,
+            "magic": 0
+        },
+        "prayer_bonus": 0
+    }
+]

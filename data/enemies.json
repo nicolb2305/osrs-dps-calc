@@ -1,0 +1,36 @@
+[
+    {
+        "name": "Fire giant (level 86)",
+        "levels": {
+            "hitpoints": 111,
+            "attack": 65,
+            "strength": 65,
+            "defence": 65,
+            "magic": 1,
+            "ranged": 1,
+            "prayer": 1
+        },
+        "stats": {
+            "attack": {
+                "stab": 29,
+                "slash": 29,
+                "crush": 29,
+                "ranged": 0,
+                "magic": 0
+            },
+            "defence": {
+                "stab": 0,
+                "slash": 3,
+                "crush": 2,
+                "ranged": 0,
+                "magic": 0
+            },
+            "damage": {
+                "strength": 31,
+                "ranged": 0,
+                "magic": 0
+            },
+            "prayer_bonus": 0
+        }
+    }
+]

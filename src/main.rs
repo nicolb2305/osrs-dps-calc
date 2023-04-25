@@ -3,10 +3,11 @@ use std::collections::HashMap;
 use equipment::Slots;
 use generics::NamedData;
 use prayers::Prayer;
+use unit::Enemy;
 
 use crate::{
     equipment::Wielded,
-    player::{Equipped, Levels, Player},
+    unit::{Equipped, Levels, Player},
 };
 
 pub mod generics {
@@ -96,9 +97,21 @@ pub mod generics {
         }
     }
 
+    impl std::ops::SubAssign for Scalar {
+        fn sub_assign(&mut self, rhs: Self) {
+            self.0 -= rhs.0;
+        }
+    }
+
     impl From<i32> for Scalar {
         fn from(value: i32) -> Self {
             Self(value)
+        }
+    }
+
+    impl From<Scalar> for i32 {
+        fn from(value: Scalar) -> Self {
+            value.0
         }
     }
 
@@ -111,12 +124,38 @@ pub mod generics {
         }
     }
 
+    impl std::ops::AddAssign for Tiles {
+        fn add_assign(&mut self, rhs: Self) {
+            self.0 += rhs.0;
+        }
+    }
+
     #[derive(Deserialize, Debug, Clone, Copy, Default)]
     pub struct Ticks(i32);
 
     impl From<i32> for Ticks {
         fn from(value: i32) -> Self {
             Self(value)
+        }
+    }
+
+    impl std::ops::Add for Ticks {
+        type Output = Self;
+
+        fn add(self, rhs: Self) -> Self::Output {
+            Self(self.0 + rhs.0)
+        }
+    }
+
+    impl std::ops::SubAssign for Ticks {
+        fn sub_assign(&mut self, rhs: Self) {
+            self.0 -= rhs.0;
+        }
+    }
+
+    impl From<Ticks> for i32 {
+        fn from(value: Ticks) -> Self {
+            value.0
         }
     }
 }
@@ -317,6 +356,17 @@ pub mod equipment {
                 Self::OneHanded { weapon, shield: _ } => weapon.weapon_stats,
                 Self::TwoHanded { weapon } => weapon.weapon_stats,
             }
+        }
+
+        pub fn attack_speed(&self, combat_style: &CombatOption) -> Ticks {
+            let tick_offset = combat_style.invisible_boost().attack_speed;
+
+            let weapon_attack_speed = match self {
+                Self::OneHanded { weapon, shield: _ } => weapon.weapon_stats.attack_speed,
+                Self::TwoHanded { weapon } => weapon.weapon_stats.attack_speed,
+            };
+
+            weapon_attack_speed + tick_offset
         }
     }
 
@@ -556,8 +606,8 @@ pub mod equipment {
         pub defence: Scalar,
         pub ranged: Scalar,
         pub magic: Scalar,
-        pub attack_range: Scalar,
-        pub attack_speed: Scalar,
+        pub attack_range: Tiles,
+        pub attack_speed: Ticks,
     }
 
     impl CombatOption {
@@ -582,7 +632,7 @@ pub mod equipment {
                     boost.ranged += 3.into();
                 }
                 (StyleType::Ranged, WeaponStyle::Rapid | WeaponStyle::MediumFuse) => {
-                    boost.attack_speed += 1.into();
+                    boost.attack_speed -= 1.into();
                 }
                 (StyleType::Ranged, WeaponStyle::Longrange) => {
                     boost.defence += 3.into();
@@ -778,8 +828,8 @@ pub mod equipment {
     #[derive(Deserialize, Debug, Clone, Copy)]
     pub struct WeaponStats {
         pub weapon_type: WeaponType,
-        pub attack_speed: Tiles,
-        pub range: Ticks,
+        pub attack_speed: Ticks,
+        pub range: Tiles,
     }
 
     impl Default for WeaponStats {
@@ -840,15 +890,47 @@ pub mod prayers {
     }
 }
 
-pub mod player {
+pub mod unit {
+    use serde::Deserialize;
+
     use crate::{
         equipment::{
             Ammunition, Body, Cape, CombatOption, Feet, Hands, Head, Legs, Neck, Ring, Stats,
             StyleType, Wielded,
         },
-        generics::Scalar,
+        generics::{NamedData, Scalar},
         prayers::Prayer,
     };
+
+    #[derive(Debug, Deserialize, Clone)]
+    pub struct Enemy {
+        pub name: String,
+        pub levels: Levels,
+        pub stats: Stats,
+    }
+
+    impl NamedData for Enemy {
+        fn get_name(&self) -> &str {
+            &self.name
+        }
+    }
+
+    impl Enemy {
+        pub fn max_defence_roll(&self, style_type: &StyleType) -> Scalar {
+            let style_defence = match style_type {
+                StyleType::Stab => self.stats.defence.stab,
+                StyleType::Slash => self.stats.defence.slash,
+                StyleType::Crush => self.stats.defence.crush,
+                StyleType::Ranged => self.stats.defence.ranged,
+                StyleType::Magic => self.stats.defence.magic,
+                StyleType::None => todo!(),
+            };
+
+            let effective_defence_level = self.levels.defence + 9.into();
+
+            effective_defence_level * (style_defence + 64.into())
+        }
+    }
 
     #[derive(Debug)]
     pub struct Player {
@@ -908,6 +990,52 @@ pub mod player {
                 + 320.into())
                 / 640.into()
         }
+
+        pub fn max_accuracy_roll(&self) -> Scalar {
+            match self.combat_option.style_type {
+                StyleType::Stab | StyleType::Slash | StyleType::Crush => {
+                    self.max_melee_accuracy_roll()
+                }
+                StyleType::Ranged => todo!(),
+                StyleType::Magic => todo!(),
+                StyleType::None => todo!(),
+            }
+        }
+
+        pub fn max_hit(&self) -> Scalar {
+            match self.combat_option.style_type {
+                StyleType::Stab | StyleType::Slash | StyleType::Crush => self.max_melee_hit(),
+                StyleType::Ranged => todo!(),
+                StyleType::Magic => todo!(),
+                StyleType::None => todo!(),
+            }
+        }
+
+        pub fn dps(&self, enemy: &Enemy) -> f64 {
+            let max_enemy_defence_roll: i32 = enemy
+                .max_defence_roll(&self.combat_option.style_type)
+                .into();
+            let max_accuracy_roll: i32 = self.max_accuracy_roll().into();
+            let max_hit: i32 = self.max_hit().into();
+            let attack_speed: i32 = self
+                .equipped
+                .wielded
+                .attack_speed(&self.combat_option)
+                .into();
+
+            let max_accuracy_roll: f64 = max_accuracy_roll.into();
+            let max_enemy_defence_roll: f64 = max_enemy_defence_roll.into();
+            let max_hit: f64 = max_hit.into();
+            let attack_speed: f64 = attack_speed.into();
+
+            let hit_rate = if max_enemy_defence_roll > max_accuracy_roll {
+                0.5 * max_accuracy_roll / max_enemy_defence_roll
+            } else {
+                1f64 - (0.5 * max_enemy_defence_roll / max_accuracy_roll)
+            };
+
+            ((hit_rate * max_hit / 2.0) / attack_speed) / 0.6f64
+        }
     }
 
     impl Default for Player {
@@ -926,7 +1054,7 @@ pub mod player {
         }
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Deserialize)]
     pub struct Levels {
         pub hitpoints: Scalar,
         pub attack: Scalar,
@@ -995,10 +1123,19 @@ where
 fn main() {
     let items = read_file::<Slots>("./data/equipment.json").unwrap();
     let prayers = read_file::<Prayer>("./data/prayers.json").unwrap();
+    let enemies = read_file::<Enemy>("./data/enemies.json").unwrap();
 
-    if let (Some(Slots::WeaponOneHanded(abyssal_whip)), Some(Slots::Shield(dragon_defender))) =
-        (items.get("Abyssal whip"), items.get("Dragon defender"))
-    {
+    if let (
+        Some(Slots::WeaponOneHanded(abyssal_whip)),
+        Some(Slots::Shield(dragon_defender)),
+        Some(piety),
+        Some(fire_giant),
+    ) = (
+        items.get("Abyssal whip"),
+        items.get("Dragon defender"),
+        prayers.get("Piety"),
+        enemies.get("Fire giant (level 86)"),
+    ) {
         let wielded =
             Wielded::equip_one_handed(Some(abyssal_whip.clone()), Some(dragon_defender.clone()));
         let equipped = Equipped {
@@ -1014,13 +1151,14 @@ fn main() {
         player.equip(equipped);
         player.change_combat_style(1).unwrap();
 
-        if let Some(piety) = prayers.get("Piety") {
-            player.active_prayers = vec![piety.clone()];
-        }
+        player.active_prayers = vec![piety.clone()];
 
         dbg!(&player);
-        dbg!(&player.max_melee_accuracy_roll());
-        dbg!(&player.max_melee_hit());
+        dbg!(&player.max_accuracy_roll());
+        dbg!(&player.max_hit());
+        dbg!(&fire_giant.max_defence_roll(&equipment::StyleType::Slash));
+        dbg!(&player.dps(fire_giant));
     }
+    // dbg!(enemies);
     // dbg!(items);
 }

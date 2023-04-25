@@ -142,5 +142,36 @@
         "attributes": [
             "ColossalBlade"
         ]
+    },
+    {
+        "name": "Trident of the swamp",
+        "slot": "WeaponOneHanded",
+        "weapon_stats": {
+            "weapon_type": "PoweredStaff",
+            "attack_speed": 4,
+            "range": 7
+        },
+        "attack": {
+            "stab": 0,
+            "slash": 0,
+            "crush": 0,
+            "ranged": 0,
+            "magic": 25
+        },
+        "defence": {
+            "stab": 2,
+            "slash": 3,
+            "crush": 1,
+            "ranged": 15,
+            "magic": 0
+        },
+        "damage": {
+            "strength": 0,
+            "ranged": 0,
+            "magic": 0
+        },
+        "prayer_bonus": 0,
+        "attributes": [],
+        "powered_staff_type": "TridentOfTheSwamp"
     }
 ]

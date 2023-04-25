@@ -171,6 +171,16 @@ fn test_colossal_blade_dps() {
 #[test]
 fn test_wind_bolt_dps() {
     let player = PlayerConstructor::new().select_spell("Wind Bolt").build();
-    let fire_giant = create_fire_giant().unwrap();
-    assert!(player.dps(&fire_giant) - 1.430_348_618_544_771 < 1e-12);
+    let enemy = create_fire_giant().unwrap();
+    assert!((player.dps(&enemy) - 1.430_348_618_544_771).abs() < 1e-12);
+}
+
+#[test]
+fn test_trident_of_the_swamp() {
+    let player = PlayerConstructor::new()
+        .equip("Trident of the swamp")
+        .activate_prayer("Mystic Might")
+        .build();
+    let enemy = create_mithril_dragon().unwrap();
+    assert!((player.dps(&enemy) - 2.141_780_355_389_947_5).abs() < 1e-12);
 }

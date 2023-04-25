@@ -282,7 +282,10 @@ impl Player {
     pub fn max_magic_accuracy_roll(&self, enemy: &Enemy) -> Scalar {
         let mut effective_magic_level = self.levels.magic * self.prayer_stats().magic_accuracy;
         effective_magic_level += self.combat_option.invisible_boost().magic;
-        effective_magic_level += 9.into();
+        effective_magic_level += 8.into();
+        if self.spell.is_some() {
+            effective_magic_level += 1.into();
+        }
 
         let magic_bonus = self.equipped.total_stats().attack.magic;
 
@@ -575,7 +578,7 @@ impl Equipped {
             PoweredStaff::CrystalStaffAttuned => 31.into(),
             PoweredStaff::CrystallStaffPerfected => 39.into(),
             PoweredStaff::SwampLizard => {
-                ((player.levels.magic * Scalar::new(56)) + Scalar::new(320)) / Scalar::new(640)
+                ((player.levels.magic * Scalar::new(56 + 64)) + Scalar::new(320)) / Scalar::new(640)
             }
             PoweredStaff::OrangeSalamander => {
                 ((player.levels.magic * Scalar::new(59 + 64)) + Scalar::new(320)) / Scalar::new(640)

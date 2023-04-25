@@ -18,5 +18,15 @@
         "ranged_damage": 23,
         "magic_accuracy": 0,
         "magic_defence": 0
+    },
+    {
+        "name": "Mystic Might",
+        "defence": 0,
+        "melee_accuracy": 0,
+        "melee_damage": 0,
+        "ranged_accuracy": 0,
+        "ranged_damage": 0,
+        "magic_accuracy": 15,
+        "magic_defence": 15
     }
 ]

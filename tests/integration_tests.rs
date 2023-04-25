@@ -152,12 +152,7 @@ fn test_colossal_blade_dps() {
     let player = PlayerConstructor::new()
         .equip("Colossal blade")
         .activate_prayer("Piety")
-        .build()
-        .set_levels(Levels {
-            attack: 99.into(),
-            strength: 99.into(),
-            ..Default::default()
-        });
+        .build();
     let fire_giant = create_fire_giant().unwrap();
     assert!(player.dps(&fire_giant) - 4.529_294_403_504_855 < 1e-6);
 }

@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use osrs_dps_calc::{
     equipment::{Slots, StyleType},
+    generics::read_file,
     prayers::Prayer,
-    read_file,
     unit::{Enemy, Levels, Player},
 };
 

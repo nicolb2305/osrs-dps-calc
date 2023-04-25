@@ -1,12 +1,14 @@
+mod weapon_callbacks;
+
 use std::ops::Add;
 
 use crate::{
-    generics::{NamedData, Percentage, Scalar, Ticks, Tiles},
-    unit::{Enemy, Player},
-    weapon_callbacks::{
+    equipment::weapon_callbacks::{
         colossal_blade, dragon_hunter_crossbow_accuracy, dragon_hunter_crossbow_max_hit, identity,
         salve_amulet,
     },
+    generics::{NamedData, Percentage, Scalar, Ticks, Tiles},
+    unit::{Enemy, Player},
 };
 use serde::Deserialize;
 

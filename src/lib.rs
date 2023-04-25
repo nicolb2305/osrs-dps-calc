@@ -2,6 +2,78 @@ use std::collections::HashMap;
 
 use generics::NamedData;
 
+pub(crate) mod weapon_callbacks {
+    use std::cmp::min;
+
+    use crate::{
+        equipment::StyleType,
+        generics::{Fraction, Scalar},
+        unit::{Enemy, Player},
+    };
+
+    pub(crate) fn identity(value: Scalar, _player: &Player, _enemy: &Enemy) -> Scalar {
+        value
+    }
+
+    pub(crate) fn dragon_hunter_crossbow_accuracy(
+        accuracy_roll: Scalar,
+        _player: &Player,
+        enemy: &Enemy,
+    ) -> Scalar {
+        use crate::unit::EnemyAttribute::Dragon;
+
+        if enemy.has_attribute(&Dragon) {
+            accuracy_roll
+                * Fraction {
+                    dividend: 13,
+                    divisor: 10,
+                }
+        } else {
+            accuracy_roll
+        }
+    }
+
+    pub(crate) fn dragon_hunter_crossbow_max_hit(
+        max_hit: Scalar,
+        _player: &Player,
+        enemy: &Enemy,
+    ) -> Scalar {
+        use crate::unit::EnemyAttribute::Dragon;
+
+        if enemy.has_attribute(&Dragon) {
+            max_hit
+                * Fraction {
+                    dividend: 5,
+                    divisor: 4,
+                }
+        } else {
+            max_hit
+        }
+    }
+
+    pub(crate) fn salve_amulet(value: Scalar, player: &Player, enemy: &Enemy) -> Scalar {
+        use crate::unit::EnemyAttribute::Undead;
+
+        match player.combat_option().style_type {
+            StyleType::Stab | StyleType::Slash | StyleType::Crush
+                if enemy.has_attribute(&Undead) =>
+            {
+                value
+                    * Fraction {
+                        dividend: 7,
+                        divisor: 6,
+                    }
+            }
+            _ => value,
+        }
+    }
+
+    pub(crate) fn colossal_blade(max_hit: Scalar, _player: &Player, enemy: &Enemy) -> Scalar {
+        let size: Scalar = min(enemy.size, 5.into()).into();
+        max_hit + (Scalar::new(2) * size)
+    }
+}
+
 pub mod generics {
     use serde::Deserialize;
 
@@ -52,6 +124,12 @@ pub mod generics {
 
     #[derive(Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
     pub struct Scalar(i32);
+
+    impl Scalar {
+        pub fn new(value: i32) -> Self {
+            Self(value)
+        }
+    }
 
     impl std::ops::Mul for Scalar {
         type Output = Self;
@@ -117,7 +195,13 @@ pub mod generics {
         }
     }
 
-    #[derive(Deserialize, Debug, Clone, Copy, Default)]
+    impl From<Tiles> for Scalar {
+        fn from(value: Tiles) -> Self {
+            Self(value.0)
+        }
+    }
+
+    #[derive(Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
     pub struct Tiles(i32);
 
     impl From<i32> for Tiles {
@@ -132,7 +216,13 @@ pub mod generics {
         }
     }
 
-    #[derive(Deserialize, Debug, Clone, Copy, Default)]
+    impl From<Scalar> for Tiles {
+        fn from(value: Scalar) -> Self {
+            Self(value.0)
+        }
+    }
+
+    #[derive(Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
     pub struct Ticks(i32);
 
     impl From<i32> for Ticks {
@@ -165,7 +255,14 @@ pub mod generics {
 pub mod equipment {
     use std::ops::Add;
 
-    use crate::generics::{NamedData, Percentage, Scalar, Ticks, Tiles};
+    use crate::{
+        generics::{NamedData, Percentage, Scalar, Ticks, Tiles},
+        unit::{Enemy, Player},
+        weapon_callbacks::{
+            colossal_blade, dragon_hunter_crossbow_accuracy, dragon_hunter_crossbow_max_hit,
+            identity, salve_amulet,
+        },
+    };
     use serde::Deserialize;
 
     pub trait HasStats: for<'a> Deserialize<'a> {
@@ -209,6 +306,25 @@ pub mod equipment {
         TwistedBow,
         DragonHunterCrossbow,
         SmokeStaff,
+    }
+
+    impl Attribute {
+        pub fn accuracy_roll_callback(&self) -> fn(Scalar, &Player, &Enemy) -> Scalar {
+            match self {
+                Self::DragonHunterCrossbow => dragon_hunter_crossbow_accuracy,
+                Self::SalveAmulet => salve_amulet,
+                _ => identity,
+            }
+        }
+
+        pub fn max_hit_callback(&self) -> fn(Scalar, &Player, &Enemy) -> Scalar {
+            match self {
+                Self::DragonHunterCrossbow => dragon_hunter_crossbow_max_hit,
+                Self::SalveAmulet => salve_amulet,
+                Self::ColossalBlade => colossal_blade,
+                _ => identity,
+            }
+        }
     }
 
     macro_rules! equipment_struct {
@@ -406,11 +522,15 @@ pub mod equipment {
             weapon_attack_speed + tick_offset
         }
 
-        pub fn weapon_has_attribute(&self, attribute: &Attribute) -> bool {
+        pub fn attributes(&self) -> &Vec<Attribute> {
             match self {
-                Self::OneHanded { weapon, shield: _ } => weapon.attributes.contains(attribute),
-                Self::TwoHanded { weapon } => weapon.attributes.contains(attribute),
+                Self::OneHanded { weapon, shield: _ } => &weapon.attributes,
+                Self::TwoHanded { weapon } => &weapon.attributes,
             }
+        }
+
+        pub fn weapon_has_attribute(&self, attribute: &Attribute) -> bool {
+            self.attributes().contains(attribute)
         }
     }
 
@@ -939,10 +1059,10 @@ pub mod unit {
 
     use crate::{
         equipment::{
-            Ammunition, Body, Cape, CombatOption, Feet, Hands, Head, Legs, Neck, Ring, Stats,
-            StyleType, Wielded,
+            Ammunition, Body, Cape, CombatOption, Feet, Hands, Head, Legs, Neck, Ring, Shield,
+            Slots, Stats, StyleType, WeaponOneHanded, Wielded,
         },
-        generics::{Fraction, NamedData, Scalar, Tiles, SECONDS_PER_TICK},
+        generics::{NamedData, Scalar, Tiles, SECONDS_PER_TICK},
         prayers::Prayer,
     };
 
@@ -963,6 +1083,7 @@ pub mod unit {
         Golem,
         Vampyre,
         Leafy,
+        Undead,
     }
 
     impl NamedData for Enemy {
@@ -979,7 +1100,7 @@ pub mod unit {
                 StyleType::Crush => self.stats.defence.crush,
                 StyleType::Ranged => self.stats.defence.ranged,
                 StyleType::Magic => self.stats.defence.magic,
-                StyleType::None => todo!(),
+                StyleType::None => unimplemented!(),
             };
 
             let effective_defence_level = self.levels.defence + 9.into();
@@ -992,25 +1113,48 @@ pub mod unit {
         }
     }
 
+    #[derive(Debug, Clone, Copy)]
+    pub struct Extra {
+        pub on_slayer_task: bool,
+        pub mining_level: Scalar,
+        pub in_wilderness: bool,
+    }
+
+    impl Default for Extra {
+        fn default() -> Self {
+            Self {
+                on_slayer_task: true,
+                mining_level: 99.into(),
+                in_wilderness: true,
+            }
+        }
+    }
+
     #[derive(Debug)]
     pub struct Player {
         pub levels: Levels,
         equipped: Equipped,
         pub active_prayers: Vec<Prayer>,
         combat_option: CombatOption,
+        pub extra: Extra,
     }
 
     impl Player {
         #[must_use]
-        pub fn equip(mut self, equipped: Equipped) -> Self {
-            self.combat_option = equipped
+        pub fn equip_full(mut self, equipped: Equipped) -> Self {
+            self.equipped = equipped;
+            self.update_combat_option();
+            self
+        }
+
+        fn update_combat_option(&mut self) {
+            self.combat_option = self
+                .equipped
                 .wielded
                 .combat_boost()
                 .get(0)
                 .expect("Should contain at least 3 options")
                 .clone();
-            self.equipped = equipped;
-            self
         }
 
         #[must_use]
@@ -1025,6 +1169,77 @@ pub mod unit {
             self
         }
 
+        #[must_use]
+        pub fn equip(mut self, slot: Slots) -> Self {
+            match slot {
+                Slots::Head(head) => self.equipped.head = head,
+                Slots::Cape(cape) => self.equipped.cape = cape,
+                Slots::Neck(neck) => self.equipped.neck = neck,
+                Slots::Ammunition(ammunition) => self.equipped.ammunition = ammunition,
+                Slots::WeaponOneHanded(weapon_one_handed) => {
+                    match self.equipped.wielded {
+                        Wielded::OneHanded {
+                            ref mut weapon,
+                            shield: _,
+                        } => *weapon = weapon_one_handed,
+                        Wielded::TwoHanded { weapon: _ } => {
+                            self.equipped.wielded = Wielded::OneHanded {
+                                weapon: weapon_one_handed,
+                                shield: Shield::default(),
+                            }
+                        }
+                    };
+                    self.update_combat_option();
+                }
+                Slots::WeaponTwoHanded(weapon_two_handed) => {
+                    match self.equipped.wielded {
+                        Wielded::OneHanded {
+                            weapon: _,
+                            shield: _,
+                        } => {
+                            self.equipped.wielded = Wielded::TwoHanded {
+                                weapon: weapon_two_handed,
+                            }
+                        }
+                        Wielded::TwoHanded { ref mut weapon } => *weapon = weapon_two_handed,
+                    };
+                    self.update_combat_option();
+                }
+                Slots::Body(body) => self.equipped.body = body,
+                Slots::Shield(new_shield) => {
+                    match self.equipped.wielded {
+                        Wielded::OneHanded {
+                            weapon: _,
+                            ref mut shield,
+                        } => *shield = new_shield,
+                        Wielded::TwoHanded { weapon: _ } => {
+                            self.equipped.wielded = Wielded::OneHanded {
+                                weapon: WeaponOneHanded::default(),
+                                shield: new_shield,
+                            }
+                        }
+                    };
+                    self.update_combat_option();
+                }
+                Slots::Legs(legs) => self.equipped.legs = legs,
+                Slots::Hands(hands) => self.equipped.hands = hands,
+                Slots::Feet(feet) => self.equipped.feet = feet,
+                Slots::Ring(ring) => self.equipped.ring = ring,
+            };
+
+            self
+        }
+
+        pub fn equipped(&self) -> &Equipped {
+            &self.equipped
+        }
+
+        pub fn combat_option(&self) -> &CombatOption {
+            &self.combat_option
+        }
+
+        /// # Errors
+        /// Returns an error if the index is invalid for the currently wielded weapon
         pub fn change_combat_style(&mut self, index: usize) -> Result<(), &str> {
             let combat_options = self.equipped.wielded.combat_boost();
             self.combat_option = combat_options.get(index).ok_or("Invalid index")?.clone();
@@ -1050,7 +1265,13 @@ pub mod unit {
                 _ => unreachable!(),
             };
 
-            effective_attack_level * (style_bonus + 64.into())
+            let mut attack_roll = effective_attack_level * (style_bonus + 64.into());
+
+            attack_roll = self
+                .equipped
+                .accuracy_roll_callback(attack_roll, self, enemy);
+
+            attack_roll
         }
 
         pub fn max_melee_hit(&self, enemy: &Enemy) -> Scalar {
@@ -1059,15 +1280,17 @@ pub mod unit {
             effective_strength_level += self.combat_option.invisible_boost().strength;
             effective_strength_level += 8.into();
 
-            (effective_strength_level * (self.equipped.total_stats().damage.strength + 64.into())
+            let mut max_hit = (effective_strength_level
+                * (self.equipped.total_stats().damage.strength + 64.into())
                 + 320.into())
-                / 640.into()
+                / 640.into();
+
+            max_hit = self.equipped.max_hit_callback(max_hit, self, enemy);
+
+            max_hit
         }
 
         pub fn max_ranged_accuracy_roll(&self, enemy: &Enemy) -> Scalar {
-            use crate::equipment::Attribute::DragonHunterCrossbow;
-            use crate::unit::EnemyAttribute::Dragon;
-
             let mut effective_ranged_level =
                 self.levels.ranged * self.prayer_stats().ranged_accuracy;
             effective_ranged_level += self.combat_option.invisible_boost().ranged;
@@ -1080,27 +1303,14 @@ pub mod unit {
 
             let mut attack_roll = effective_ranged_level * (style_bonus + 64.into());
 
-            // Dragon hunter crossbow
-            if self
+            attack_roll = self
                 .equipped
-                .wielded
-                .weapon_has_attribute(&DragonHunterCrossbow)
-                & enemy.has_attribute(&Dragon)
-            {
-                attack_roll = attack_roll
-                    * Fraction {
-                        dividend: 13,
-                        divisor: 10,
-                    };
-            }
+                .accuracy_roll_callback(attack_roll, self, enemy);
 
             attack_roll
         }
 
         pub fn max_ranged_hit(&self, enemy: &Enemy) -> Scalar {
-            use crate::equipment::Attribute::DragonHunterCrossbow;
-            use crate::unit::EnemyAttribute::Dragon;
-
             let mut effective_ranged_level = self.levels.ranged * self.prayer_stats().ranged_damage;
             effective_ranged_level += self.combat_option.invisible_boost().ranged;
             effective_ranged_level += 8.into();
@@ -1110,19 +1320,7 @@ pub mod unit {
                 + 320.into())
                 / 640.into();
 
-            // Dragon hunter crossbow
-            if self
-                .equipped
-                .wielded
-                .weapon_has_attribute(&DragonHunterCrossbow)
-                & enemy.has_attribute(&Dragon)
-            {
-                max_hit = max_hit
-                    * Fraction {
-                        dividend: 5,
-                        divisor: 4,
-                    };
-            }
+            max_hit = self.equipped.max_hit_callback(max_hit, self, enemy);
 
             max_hit
         }
@@ -1186,6 +1384,7 @@ pub mod unit {
                     .get(0)
                     .expect("Should contain at least 3 options")
                     .clone(),
+                extra: Extra::default(),
             }
         }
     }
@@ -1242,9 +1441,115 @@ pub mod unit {
                 + self.feet.stats
                 + self.ring.stats
         }
+
+        pub fn accuracy_roll_callback(
+            &self,
+            mut value: Scalar,
+            player: &Player,
+            enemy: &Enemy,
+        ) -> Scalar {
+            value = self.head.attributes.iter().fold(value, |value, attribute| {
+                (attribute.accuracy_roll_callback())(value, player, enemy)
+            });
+            value = self.cape.attributes.iter().fold(value, |value, attribute| {
+                (attribute.accuracy_roll_callback())(value, player, enemy)
+            });
+            value = self.neck.attributes.iter().fold(value, |value, attribute| {
+                (attribute.accuracy_roll_callback())(value, player, enemy)
+            });
+            value = self
+                .ammunition
+                .attributes
+                .iter()
+                .fold(value, |value, attribute| {
+                    (attribute.accuracy_roll_callback())(value, player, enemy)
+                });
+            value = self
+                .wielded
+                .attributes()
+                .iter()
+                .fold(value, |value, attribute| {
+                    (attribute.accuracy_roll_callback())(value, player, enemy)
+                });
+            value = self.body.attributes.iter().fold(value, |value, attribute| {
+                (attribute.accuracy_roll_callback())(value, player, enemy)
+            });
+            value = self.legs.attributes.iter().fold(value, |value, attribute| {
+                (attribute.accuracy_roll_callback())(value, player, enemy)
+            });
+            value = self
+                .hands
+                .attributes
+                .iter()
+                .fold(value, |value, attribute| {
+                    (attribute.accuracy_roll_callback())(value, player, enemy)
+                });
+            value = self.feet.attributes.iter().fold(value, |value, attribute| {
+                (attribute.accuracy_roll_callback())(value, player, enemy)
+            });
+            value = self.ring.attributes.iter().fold(value, |value, attribute| {
+                (attribute.accuracy_roll_callback())(value, player, enemy)
+            });
+
+            value
+        }
+
+        pub fn max_hit_callback(
+            &self,
+            mut value: Scalar,
+            player: &Player,
+            enemy: &Enemy,
+        ) -> Scalar {
+            value = self.head.attributes.iter().fold(value, |value, attribute| {
+                (attribute.max_hit_callback())(value, player, enemy)
+            });
+            value = self.cape.attributes.iter().fold(value, |value, attribute| {
+                (attribute.max_hit_callback())(value, player, enemy)
+            });
+            value = self.neck.attributes.iter().fold(value, |value, attribute| {
+                (attribute.max_hit_callback())(value, player, enemy)
+            });
+            value = self
+                .ammunition
+                .attributes
+                .iter()
+                .fold(value, |value, attribute| {
+                    (attribute.max_hit_callback())(value, player, enemy)
+                });
+            value = self
+                .wielded
+                .attributes()
+                .iter()
+                .fold(value, |value, attribute| {
+                    (attribute.max_hit_callback())(value, player, enemy)
+                });
+            value = self.body.attributes.iter().fold(value, |value, attribute| {
+                (attribute.max_hit_callback())(value, player, enemy)
+            });
+            value = self.legs.attributes.iter().fold(value, |value, attribute| {
+                (attribute.max_hit_callback())(value, player, enemy)
+            });
+            value = self
+                .hands
+                .attributes
+                .iter()
+                .fold(value, |value, attribute| {
+                    (attribute.max_hit_callback())(value, player, enemy)
+                });
+            value = self.feet.attributes.iter().fold(value, |value, attribute| {
+                (attribute.max_hit_callback())(value, player, enemy)
+            });
+            value = self.ring.attributes.iter().fold(value, |value, attribute| {
+                (attribute.max_hit_callback())(value, player, enemy)
+            });
+
+            value
+        }
     }
 }
 
+/// # Errors
+/// Returns an error if the given file cannot be found
 pub fn read_file<T>(path: &str) -> Result<HashMap<String, T>, Box<dyn std::error::Error>>
 where
     T: NamedData,

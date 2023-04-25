@@ -1,76 +1,53 @@
+use std::collections::HashMap;
+
 use osrs_dps_calc::{
-    equipment::{self, Slots, Wielded},
+    equipment::{Slots, StyleType},
     prayers::Prayer,
     read_file,
-    unit::{Enemy, Equipped, Levels, Player},
+    unit::{Enemy, Levels, Player},
 };
 
-fn create_melee_player_standard_gear() -> Result<Player, &'static str> {
-    let items = read_file::<Slots>("./data/equipment.json").unwrap();
-    let prayers = read_file::<Prayer>("./data/prayers.json").unwrap();
-
-    if let (
-        Some(Slots::WeaponOneHanded(abyssal_whip)),
-        Some(Slots::Shield(dragon_defender)),
-        Some(piety),
-    ) = (
-        items.get("Abyssal whip"),
-        items.get("Dragon defender"),
-        prayers.get("Piety"),
-    ) {
-        let wielded =
-            Wielded::equip_one_handed(Some(abyssal_whip.clone()), Some(dragon_defender.clone()));
-        let equipped = Equipped {
-            wielded,
-            ..Default::default()
-        };
-        let levels = Levels {
-            attack: 99.into(),
-            strength: 99.into(),
-            ..Default::default()
-        };
-        let player = Player::default()
-            .equip(equipped)
-            .set_levels(levels)
-            .activate_prayer(piety.clone());
-
-        Ok(player)
-    } else {
-        Err("Could not find 'Abyssal whip', 'Dragon defender' and 'Piety'.")
-    }
+pub struct PlayerConstructor {
+    items: HashMap<String, Slots>,
+    prayers: HashMap<String, Prayer>,
+    player: Player,
 }
 
-fn create_player_dragon_hunter_crossbow() -> Result<Player, &'static str> {
-    let items = read_file::<Slots>("./data/equipment.json").unwrap();
-    let prayers = read_file::<Prayer>("./data/prayers.json").unwrap();
-
-    if let (
-        Some(Slots::WeaponOneHanded(dragon_hunter_crossbow)),
-        Some(Slots::Ammunition(dragon_bolts)),
-        Some(rigour),
-    ) = (
-        items.get("Dragon hunter crossbow"),
-        items.get("Dragon bolts"),
-        prayers.get("Rigour"),
-    ) {
-        let wielded = Wielded::equip_one_handed(Some(dragon_hunter_crossbow.clone()), None);
-        let equipped = Equipped {
-            wielded,
-            ammunition: dragon_bolts.clone(),
-            ..Default::default()
-        };
-        let levels = Levels {
+impl PlayerConstructor {
+    fn new() -> Self {
+        let items = read_file::<Slots>("./data/equipment.json").unwrap();
+        let prayers = read_file::<Prayer>("./data/prayers.json").unwrap();
+        let player = Player::default().set_levels(Levels {
+            hitpoints: 99.into(),
+            attack: 99.into(),
+            strength: 99.into(),
+            defence: 99.into(),
             ranged: 99.into(),
-            ..Default::default()
-        };
-        let player = Player::default()
-            .equip(equipped)
-            .set_levels(levels)
-            .activate_prayer(rigour.clone());
+            magic: 99.into(),
+            prayer: 99.into(),
+        });
 
-        Ok(player)
-    } else {
-        Err("Could not find 'Dragon hunter crossbow', 'Dragon bolts' and 'Rigour'.")
+        Self {
+            items,
+            prayers,
+            player,
+        }
+    }
+
+    fn equip(mut self, slot: &str) -> Self {
+        self.player = self.player.equip(self.items.get(slot).unwrap().clone());
+        self
+    }
+
+    fn activate_prayer(mut self, prayer: &str) -> Self {
+        self.player = self
+            .player
+            .activate_prayer(self.prayers.get(prayer).unwrap().clone());
+        self
+    }
+
+    fn build(self) -> Player {
+        self.player
     }
 }
 
@@ -94,7 +71,11 @@ fn create_mithril_dragon() -> Result<Enemy, &'static str> {
 
 #[test]
 fn test_standard_melee_accuracy() {
-    let mut player = create_melee_player_standard_gear().unwrap();
+    let mut player = PlayerConstructor::new()
+        .equip("Abyssal whip")
+        .equip("Dragon defender")
+        .activate_prayer("Piety")
+        .build();
     let fire_giant = create_fire_giant().unwrap();
     player.change_combat_style(1).unwrap();
     assert_eq!(player.max_accuracy_roll(&fire_giant), 21590.into());
@@ -102,7 +83,11 @@ fn test_standard_melee_accuracy() {
 
 #[test]
 fn test_standard_melee_max_hit() {
-    let mut player = create_melee_player_standard_gear().unwrap();
+    let mut player = PlayerConstructor::new()
+        .equip("Abyssal whip")
+        .equip("Dragon defender")
+        .activate_prayer("Piety")
+        .build();
     let fire_giant = create_fire_giant().unwrap();
     player.change_combat_style(1).unwrap();
     assert_eq!(player.max_hit(&fire_giant), 31.into());
@@ -111,15 +96,16 @@ fn test_standard_melee_max_hit() {
 #[test]
 fn test_enemy_slash_defence() {
     let fire_giant = create_fire_giant().unwrap();
-    assert_eq!(
-        fire_giant.max_defence_roll(&equipment::StyleType::Slash),
-        4958.into()
-    );
+    assert_eq!(fire_giant.max_defence_roll(&StyleType::Slash), 4958.into());
 }
 
 #[test]
 fn test_standard_melee_dps_vs_enemy() {
-    let mut player = create_melee_player_standard_gear().unwrap();
+    let mut player = PlayerConstructor::new()
+        .equip("Abyssal whip")
+        .equip("Dragon defender")
+        .activate_prayer("Piety")
+        .build();
     player.change_combat_style(1).unwrap();
     let fire_giant = create_fire_giant().unwrap();
     assert!(player.dps(&fire_giant) - 5.716_776_671_298_441 < 1e-6);
@@ -127,7 +113,11 @@ fn test_standard_melee_dps_vs_enemy() {
 
 #[test]
 fn test_dragon_hunter_crossbow_accuracy() {
-    let mut player = create_player_dragon_hunter_crossbow().unwrap();
+    let mut player = PlayerConstructor::new()
+        .equip("Dragon hunter crossbow")
+        .equip("Dragon bolts")
+        .activate_prayer("Rigour")
+        .build();
     player.change_combat_style(1).unwrap();
     let mithril_dragon = create_mithril_dragon().unwrap();
     assert_eq!(player.max_accuracy_roll(&mithril_dragon), 26044.into());
@@ -135,7 +125,11 @@ fn test_dragon_hunter_crossbow_accuracy() {
 
 #[test]
 fn test_dragon_hunter_crossbow_max_hit() {
-    let mut player = create_player_dragon_hunter_crossbow().unwrap();
+    let mut player = PlayerConstructor::new()
+        .equip("Dragon hunter crossbow")
+        .equip("Dragon bolts")
+        .activate_prayer("Rigour")
+        .build();
     player.change_combat_style(1).unwrap();
     let mithril_dragon = create_mithril_dragon().unwrap();
     assert_eq!(player.max_hit(&mithril_dragon), 46.into());
@@ -143,8 +137,27 @@ fn test_dragon_hunter_crossbow_max_hit() {
 
 #[test]
 fn test_dragon_hunter_crossbow_dps() {
-    let mut player = create_player_dragon_hunter_crossbow().unwrap();
+    let mut player = PlayerConstructor::new()
+        .equip("Dragon hunter crossbow")
+        .equip("Dragon bolts")
+        .activate_prayer("Rigour")
+        .build();
     player.change_combat_style(1).unwrap();
     let mithril_dragon = create_mithril_dragon().unwrap();
     assert!(player.dps(&mithril_dragon) - 2.340_366_011_846_156_4 < 1e-6);
+}
+
+#[test]
+fn test_colossal_blade_dps() {
+    let player = PlayerConstructor::new()
+        .equip("Colossal blade")
+        .activate_prayer("Piety")
+        .build()
+        .set_levels(Levels {
+            attack: 99.into(),
+            strength: 99.into(),
+            ..Default::default()
+        });
+    let fire_giant = create_fire_giant().unwrap();
+    assert!(player.dps(&fire_giant) - 4.529_294_403_504_855 < 1e-6);
 }

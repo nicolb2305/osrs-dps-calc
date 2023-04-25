@@ -110,5 +110,37 @@
         },
         "prayer_bonus": 0,
         "attributes": []
+    },
+    {
+        "name": "Colossal blade",
+        "slot": "WeaponTwoHanded",
+        "weapon_stats": {
+            "weapon_type": "TwoHandedSword",
+            "attack_speed": 6,
+            "range": 1
+        },
+        "attack": {
+            "stab": -4,
+            "slash": 98,
+            "crush": 65,
+            "ranged": -4,
+            "magic": 0
+        },
+        "defence": {
+            "stab": 0,
+            "slash": 0,
+            "crush": 0,
+            "ranged": -1,
+            "magic": 0
+        },
+        "damage": {
+            "strength": 100,
+            "ranged": 0,
+            "magic": 0
+        },
+        "prayer_bonus": 0,
+        "attributes": [
+            "ColossalBlade"
+        ]
     }
 ]

@@ -2,11 +2,12 @@ use serde::Deserialize;
 
 use crate::{
     equipment::{
-        Ammunition, Body, Cape, CombatOption, Feet, Hands, Head, Legs, Neck, Ring, Shield, Slots,
-        Stats, StyleType, WeaponOneHanded, Wielded,
+        Ammunition, Body, Cape, CombatOption, Feet, Hands, Head, Legs, Neck, PoweredStaff, Ring,
+        Shield, Slots, Stats, StyleType, WeaponOneHanded, Wielded,
     },
-    generics::{NamedData, Scalar, Tiles, SECONDS_PER_TICK},
+    generics::{NamedData, Scalar, Ticks, Tiles, SECONDS_PER_TICK},
     prayers::Prayer,
+    spells::Spell,
 };
 
 #[derive(Debug, Deserialize, Clone)]
@@ -46,7 +47,11 @@ impl Enemy {
             StyleType::None => unimplemented!(),
         };
 
-        let effective_defence_level = self.levels.defence + 9.into();
+        let effective_defence_level = if let StyleType::Magic = style_type {
+            self.levels.magic
+        } else {
+            self.levels.defence
+        } + 9.into();
 
         effective_defence_level * (style_defence + 64.into())
     }
@@ -61,6 +66,7 @@ pub struct Extra {
     pub on_slayer_task: bool,
     pub mining_level: Scalar,
     pub in_wilderness: bool,
+    pub charge_active: bool,
 }
 
 impl Default for Extra {
@@ -69,6 +75,7 @@ impl Default for Extra {
             on_slayer_task: true,
             mining_level: 99.into(),
             in_wilderness: true,
+            charge_active: false,
         }
     }
 }
@@ -79,6 +86,7 @@ pub struct Player {
     equipped: Equipped,
     pub active_prayers: Vec<Prayer>,
     combat_option: CombatOption,
+    pub spell: Option<Spell>,
     pub extra: Extra,
 }
 
@@ -109,6 +117,12 @@ impl Player {
     #[must_use]
     pub fn activate_prayer(mut self, prayer: Prayer) -> Self {
         self.active_prayers.push(prayer);
+        self
+    }
+
+    #[must_use]
+    pub fn select_spell(mut self, spell: Spell) -> Self {
+        self.spell = Some(spell);
         self
     }
 
@@ -265,37 +279,85 @@ impl Player {
         max_hit
     }
 
+    pub fn max_magic_accuracy_roll(&self, enemy: &Enemy) -> Scalar {
+        let mut effective_magic_level = self.levels.magic * self.prayer_stats().magic_accuracy;
+        effective_magic_level += self.combat_option.invisible_boost().magic;
+        effective_magic_level += 9.into();
+
+        let magic_bonus = self.equipped.total_stats().attack.magic;
+
+        let mut attack_roll = effective_magic_level * (magic_bonus + 64.into());
+
+        attack_roll = self
+            .equipped
+            .accuracy_roll_callback(attack_roll, self, enemy);
+
+        attack_roll
+    }
+
+    pub fn max_magic_hit(&self, _enemy: &Enemy) -> Scalar {
+        let mut max_hit = if let Some(max_hit) = self.equipped.powered_staff_max_hit(self) {
+            max_hit
+        } else if let Some(spell) = &self.spell {
+            spell.max_hit
+        } else {
+            unimplemented!()
+        };
+
+        let magic_damage_bonus = self.equipped.total_stats().damage.magic;
+
+        max_hit = max_hit * magic_damage_bonus;
+
+        max_hit
+    }
+
     pub fn max_accuracy_roll(&self, enemy: &Enemy) -> Scalar {
-        match self.combat_option.style_type {
-            StyleType::Stab | StyleType::Slash | StyleType::Crush => {
-                self.max_melee_accuracy_roll(enemy)
+        if let Some(_spell) = &self.spell {
+            self.max_magic_accuracy_roll(enemy)
+        } else {
+            match self.combat_option.style_type {
+                StyleType::Stab | StyleType::Slash | StyleType::Crush => {
+                    self.max_melee_accuracy_roll(enemy)
+                }
+                StyleType::Ranged => self.max_ranged_accuracy_roll(enemy),
+                StyleType::Magic => self.max_magic_accuracy_roll(enemy),
+                StyleType::None => unimplemented!(),
             }
-            StyleType::Ranged => self.max_ranged_accuracy_roll(enemy),
-            StyleType::Magic => todo!(),
-            StyleType::None => todo!(),
         }
     }
 
     pub fn max_hit(&self, enemy: &Enemy) -> Scalar {
-        match self.combat_option.style_type {
-            StyleType::Stab | StyleType::Slash | StyleType::Crush => self.max_melee_hit(enemy),
-            StyleType::Ranged => self.max_ranged_hit(enemy),
-            StyleType::Magic => todo!(),
-            StyleType::None => todo!(),
+        if let Some(_spell) = &self.spell {
+            self.max_magic_hit(enemy)
+        } else {
+            match self.combat_option.style_type {
+                StyleType::Stab | StyleType::Slash | StyleType::Crush => self.max_melee_hit(enemy),
+                StyleType::Ranged => self.max_ranged_hit(enemy),
+                StyleType::Magic => self.max_magic_hit(enemy),
+                StyleType::None => unimplemented!(),
+            }
         }
     }
 
     pub fn dps(&self, enemy: &Enemy) -> f64 {
-        let max_enemy_defence_roll: i32 = enemy
-            .max_defence_roll(&self.combat_option.style_type)
-            .into();
+        let style_type = if self.spell.is_some() {
+            &StyleType::Magic
+        } else {
+            &self.combat_option.style_type
+        };
+        let max_enemy_defence_roll: i32 = enemy.max_defence_roll(style_type).into();
         let max_accuracy_roll: i32 = self.max_accuracy_roll(enemy).into();
         let max_hit: i32 = self.max_hit(enemy).into();
-        let attack_speed: i32 = self
-            .equipped
-            .wielded
-            .attack_speed(&self.combat_option)
-            .into();
+        let attack_speed: i32 = if let Some(_spell) = &self.spell {
+            self.equipped
+                .attack_speed_callback(5.into(), self, enemy)
+                .into()
+        } else {
+            self.equipped
+                .wielded
+                .attack_speed(&self.combat_option)
+                .into()
+        };
 
         let max_accuracy_roll: f64 = max_accuracy_roll.into();
         let max_enemy_defence_roll: f64 = max_enemy_defence_roll.into();
@@ -303,9 +365,9 @@ impl Player {
         let attack_speed: f64 = attack_speed.into();
 
         let hit_rate = if max_enemy_defence_roll > max_accuracy_roll {
-            0.5 * max_accuracy_roll / max_enemy_defence_roll
+            0.5 * max_accuracy_roll / (max_enemy_defence_roll + 1.0)
         } else {
-            1f64 - (0.5 * max_enemy_defence_roll / max_accuracy_roll)
+            1f64 - (0.5 * (max_enemy_defence_roll + 2.0) / (max_accuracy_roll + 1.0))
         };
 
         ((hit_rate * max_hit / 2.0) / attack_speed) / SECONDS_PER_TICK
@@ -324,6 +386,7 @@ impl Default for Player {
                 .get(0)
                 .expect("Should contain at least 3 options")
                 .clone(),
+            spell: None,
             extra: Extra::default(),
         }
     }
@@ -479,5 +542,50 @@ impl Equipped {
         });
 
         value
+    }
+
+    pub fn attack_speed_callback(&self, value: Ticks, player: &Player, enemy: &Enemy) -> Ticks {
+        self.wielded
+            .attributes()
+            .iter()
+            .fold(value, |value, attribute| {
+                (attribute.attack_speed_callback())(value, player, enemy)
+            })
+    }
+
+    pub fn powered_staff_max_hit(&self, player: &Player) -> Option<Scalar> {
+        fn standard_formula(player: &Player, i: i32, j: i32) -> Scalar {
+            player.levels.magic / Scalar::new(i) - Scalar::new(j)
+        }
+
+        match &self.wielded {
+            Wielded::OneHanded { weapon, shield: _ } => weapon.powered_staff_type,
+            Wielded::TwoHanded { weapon } => weapon.powered_staff_type,
+        }
+        .map(|powered_staff| match powered_staff {
+            PoweredStaff::StarterStaff => 8.into(),
+            PoweredStaff::TridentOfTheSeas => standard_formula(player, 3, 5),
+            PoweredStaff::ThammaronsSceptre => standard_formula(player, 3, 8),
+            PoweredStaff::AccursedSceptre => standard_formula(player, 3, 6),
+            PoweredStaff::TridentOfTheSwamp => standard_formula(player, 3, 2),
+            PoweredStaff::SanguinestiStaff => standard_formula(player, 3, 1),
+            PoweredStaff::Dawnbringer => standard_formula(player, 6, 1),
+            PoweredStaff::TumekensShadow => standard_formula(player, 3, -1),
+            PoweredStaff::CrystalStaffBasic => 25.into(),
+            PoweredStaff::CrystalStaffAttuned => 31.into(),
+            PoweredStaff::CrystallStaffPerfected => 39.into(),
+            PoweredStaff::SwampLizard => {
+                ((player.levels.magic * Scalar::new(56)) + Scalar::new(320)) / Scalar::new(640)
+            }
+            PoweredStaff::OrangeSalamander => {
+                ((player.levels.magic * Scalar::new(59 + 64)) + Scalar::new(320)) / Scalar::new(640)
+            }
+            PoweredStaff::RedSalamander => {
+                ((player.levels.magic * Scalar::new(77 + 64)) + Scalar::new(320)) / Scalar::new(640)
+            }
+            PoweredStaff::BlackSalamander => {
+                ((player.levels.magic * Scalar::new(92 + 64)) + Scalar::new(320)) / Scalar::new(640)
+            }
+        })
     }
 }

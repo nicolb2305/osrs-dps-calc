@@ -12,6 +12,8 @@ use crate::{
 };
 use serde::Deserialize;
 
+use self::weapon_callbacks::harmonised_nightmare_staff_attack_speed;
+
 pub trait HasStats: for<'a> Deserialize<'a> {
     fn name(&self) -> &str;
     fn attack(&self) -> StatBonuses;
@@ -53,6 +55,7 @@ pub enum Attribute {
     TwistedBow,
     DragonHunterCrossbow,
     SmokeStaff,
+    HarmonisedNightmareStaff,
 }
 
 impl Attribute {
@@ -69,6 +72,13 @@ impl Attribute {
             Self::DragonHunterCrossbow => dragon_hunter_crossbow_max_hit,
             Self::SalveAmulet => salve_amulet,
             Self::ColossalBlade => colossal_blade,
+            _ => identity,
+        }
+    }
+
+    pub fn attack_speed_callback(&self) -> fn(Ticks, &Player, &Enemy) -> Ticks {
+        match self {
+            Self::HarmonisedNightmareStaff => harmonised_nightmare_staff_attack_speed,
             _ => identity,
         }
     }
@@ -130,6 +140,7 @@ macro_rules! weapon_struct {
                 pub stats: Stats,
                 pub attributes: Vec<Attribute>,
                 pub weapon_stats: WeaponStats,
+                pub powered_staff_type: Option<PoweredStaff>
             }
 
             impl HasStats for $struct_name {
@@ -167,6 +178,7 @@ macro_rules! weapon_struct {
                         stats: Stats::default(),
                         attributes: Vec::default(),
                         weapon_stats: WeaponStats::default(),
+                        powered_staff_type: None,
                     }
                 }
             }
@@ -176,6 +188,25 @@ macro_rules! weapon_struct {
 
 equipment_struct!(Head Cape Neck Ammunition Shield Body Legs Hands Feet Ring);
 weapon_struct!(WeaponOneHanded WeaponTwoHanded);
+
+#[derive(Debug, Deserialize, Clone, Copy)]
+pub enum PoweredStaff {
+    StarterStaff,
+    TridentOfTheSeas,
+    ThammaronsSceptre,
+    AccursedSceptre,
+    TridentOfTheSwamp,
+    SanguinestiStaff,
+    Dawnbringer,
+    TumekensShadow,
+    CrystalStaffBasic,
+    CrystalStaffAttuned,
+    CrystallStaffPerfected,
+    SwampLizard,
+    OrangeSalamander,
+    RedSalamander,
+    BlackSalamander,
+}
 
 #[derive(Debug, Deserialize, Default, Clone, Copy)]
 pub struct Stats {

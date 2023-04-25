@@ -2,11 +2,11 @@ use std::cmp::min;
 
 use crate::{
     equipment::StyleType,
-    generics::{Fraction, Scalar},
+    generics::{Fraction, Scalar, Ticks},
     unit::{Enemy, Player},
 };
 
-pub(crate) fn identity(value: Scalar, _player: &Player, _enemy: &Enemy) -> Scalar {
+pub(crate) fn identity<T>(value: T, _player: &Player, _enemy: &Enemy) -> T {
     value
 }
 
@@ -64,4 +64,16 @@ pub(crate) fn salve_amulet(value: Scalar, player: &Player, enemy: &Enemy) -> Sca
 pub(crate) fn colossal_blade(max_hit: Scalar, _player: &Player, enemy: &Enemy) -> Scalar {
     let size: Scalar = min(enemy.size, 5.into()).into();
     max_hit + (Scalar::new(2) * size)
+}
+
+pub(crate) fn harmonised_nightmare_staff_attack_speed(
+    attack_speed: Ticks,
+    player: &Player,
+    _enemy: &Enemy,
+) -> Ticks {
+    if player.spell.is_some() {
+        4.into()
+    } else {
+        attack_speed
+    }
 }

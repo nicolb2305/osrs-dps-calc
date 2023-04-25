@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Deref};
 
 use serde::Deserialize;
 
@@ -123,6 +123,22 @@ impl From<Scalar> for i32 {
 impl From<Tiles> for Scalar {
     fn from(value: Tiles) -> Self {
         Self(value.0)
+    }
+}
+
+impl std::ops::Sub for Scalar {
+    type Output = Scalar;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self(self.0 - rhs.0)
+    }
+}
+
+impl Deref for Scalar {
+    type Target = i32;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 

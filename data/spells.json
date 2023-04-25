@@ -1,0 +1,10 @@
+[
+    {
+        "name": "Wind Bolt",
+        "max_hit": 9,
+        "spellbook": "Standard",
+        "attributes": [
+            "Bolt"
+        ]
+    }
+]

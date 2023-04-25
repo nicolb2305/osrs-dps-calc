@@ -4,12 +4,14 @@ use osrs_dps_calc::{
     equipment::{Slots, StyleType},
     generics::read_file,
     prayers::Prayer,
+    spells::Spell,
     unit::{Enemy, Levels, Player},
 };
 
 pub struct PlayerConstructor {
     items: HashMap<String, Slots>,
     prayers: HashMap<String, Prayer>,
+    spells: HashMap<String, Spell>,
     player: Player,
 }
 
@@ -17,6 +19,7 @@ impl PlayerConstructor {
     fn new() -> Self {
         let items = read_file::<Slots>("./data/equipment.json").unwrap();
         let prayers = read_file::<Prayer>("./data/prayers.json").unwrap();
+        let spells = read_file::<Spell>("./data/spells.json").unwrap();
         let player = Player::default().set_levels(Levels {
             hitpoints: 99.into(),
             attack: 99.into(),
@@ -30,6 +33,7 @@ impl PlayerConstructor {
         Self {
             items,
             prayers,
+            spells,
             player,
         }
     }
@@ -43,6 +47,13 @@ impl PlayerConstructor {
         self.player = self
             .player
             .activate_prayer(self.prayers.get(prayer).unwrap().clone());
+        self
+    }
+
+    fn select_spell(mut self, spell: &str) -> Self {
+        self.player = self
+            .player
+            .select_spell(self.spells.get(spell).unwrap().clone());
         self
     }
 
@@ -76,9 +87,9 @@ fn test_standard_melee_accuracy() {
         .equip("Dragon defender")
         .activate_prayer("Piety")
         .build();
-    let fire_giant = create_fire_giant().unwrap();
+    let enemy = create_fire_giant().unwrap();
     player.change_combat_style(1).unwrap();
-    assert_eq!(player.max_accuracy_roll(&fire_giant), 21590.into());
+    assert_eq!(player.max_accuracy_roll(&enemy), 21590.into());
 }
 
 #[test]
@@ -88,15 +99,15 @@ fn test_standard_melee_max_hit() {
         .equip("Dragon defender")
         .activate_prayer("Piety")
         .build();
-    let fire_giant = create_fire_giant().unwrap();
+    let enemy = create_fire_giant().unwrap();
     player.change_combat_style(1).unwrap();
-    assert_eq!(player.max_hit(&fire_giant), 31.into());
+    assert_eq!(player.max_hit(&enemy), 31.into());
 }
 
 #[test]
 fn test_enemy_slash_defence() {
-    let fire_giant = create_fire_giant().unwrap();
-    assert_eq!(fire_giant.max_defence_roll(&StyleType::Slash), 4958.into());
+    let enemy = create_fire_giant().unwrap();
+    assert_eq!(enemy.max_defence_roll(&StyleType::Slash), 4958.into());
 }
 
 #[test]
@@ -107,8 +118,8 @@ fn test_standard_melee_dps_vs_enemy() {
         .activate_prayer("Piety")
         .build();
     player.change_combat_style(1).unwrap();
-    let fire_giant = create_fire_giant().unwrap();
-    assert!(player.dps(&fire_giant) - 5.716_776_671_298_441 < 1e-6);
+    let enemy = create_fire_giant().unwrap();
+    assert!((player.dps(&enemy) - 5.716_511_895_388_511_5).abs() < 1e-12);
 }
 
 #[test]
@@ -119,8 +130,8 @@ fn test_dragon_hunter_crossbow_accuracy() {
         .activate_prayer("Rigour")
         .build();
     player.change_combat_style(1).unwrap();
-    let mithril_dragon = create_mithril_dragon().unwrap();
-    assert_eq!(player.max_accuracy_roll(&mithril_dragon), 26044.into());
+    let enemy = create_mithril_dragon().unwrap();
+    assert_eq!(player.max_accuracy_roll(&enemy), 26044.into());
 }
 
 #[test]
@@ -131,8 +142,8 @@ fn test_dragon_hunter_crossbow_max_hit() {
         .activate_prayer("Rigour")
         .build();
     player.change_combat_style(1).unwrap();
-    let mithril_dragon = create_mithril_dragon().unwrap();
-    assert_eq!(player.max_hit(&mithril_dragon), 46.into());
+    let enemy = create_mithril_dragon().unwrap();
+    assert_eq!(player.max_hit(&enemy), 46.into());
 }
 
 #[test]
@@ -143,8 +154,8 @@ fn test_dragon_hunter_crossbow_dps() {
         .activate_prayer("Rigour")
         .build();
     player.change_combat_style(1).unwrap();
-    let mithril_dragon = create_mithril_dragon().unwrap();
-    assert!(player.dps(&mithril_dragon) - 2.340_366_011_846_156_4 < 1e-6);
+    let enemy = create_mithril_dragon().unwrap();
+    assert!((player.dps(&enemy) - 2.340_311_149_659_705).abs() < 1e-12);
 }
 
 #[test]
@@ -153,6 +164,13 @@ fn test_colossal_blade_dps() {
         .equip("Colossal blade")
         .activate_prayer("Piety")
         .build();
+    let enemy = create_fire_giant().unwrap();
+    assert!((player.dps(&enemy) - 4.529_077_680_484_447).abs() < 1e-12);
+}
+
+#[test]
+fn test_wind_bolt_dps() {
+    let player = PlayerConstructor::new().select_spell("Wind Bolt").build();
     let fire_giant = create_fire_giant().unwrap();
-    assert!(player.dps(&fire_giant) - 4.529_294_403_504_855 < 1e-6);
+    assert!(player.dps(&fire_giant) - 1.430_348_618_544_771 < 1e-12);
 }

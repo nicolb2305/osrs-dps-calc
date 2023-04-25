@@ -8,5 +8,15 @@
         "ranged_damage": 0,
         "magic_accuracy": 0,
         "magic_defence": 0
+    },
+    {
+        "name": "Rigour",
+        "defence": 25,
+        "melee_accuracy": 0,
+        "melee_damage": 0,
+        "ranged_accuracy": 20,
+        "ranged_damage": 23,
+        "magic_accuracy": 0,
+        "magic_defence": 0
     }
 ]

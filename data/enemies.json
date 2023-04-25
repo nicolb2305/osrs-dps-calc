@@ -34,5 +34,43 @@
         },
         "attributes": [],
         "size": 2
+    },
+    {
+        "name": "Mithril dragon",
+        "levels": {
+            "hitpoints": 254,
+            "attack": 268,
+            "strength": 268,
+            "defence": 268,
+            "magic": 168,
+            "ranged": 168,
+            "prayer": 1
+        },
+        "stats": {
+            "attack": {
+                "stab": 0,
+                "slash": 0,
+                "crush": 0,
+                "ranged": 0,
+                "magic": 0
+            },
+            "defence": {
+                "stab": 50,
+                "slash": 100,
+                "crush": 70,
+                "ranged": 90,
+                "magic": 30
+            },
+            "damage": {
+                "strength": 0,
+                "ranged": 0,
+                "magic": 0
+            },
+            "prayer_bonus": 0
+        },
+        "attributes": [
+            "Dragon"
+        ],
+        "size": 4
     }
 ]

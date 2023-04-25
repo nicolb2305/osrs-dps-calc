@@ -13,8 +13,8 @@ pub mod generics {
 
     #[derive(Deserialize, Debug, Clone, Copy, Default)]
     pub struct Fraction {
-        dividend: i32,
-        divisor: i32,
+        pub dividend: i32,
+        pub divisor: i32,
     }
 
     impl std::ops::Mul<Scalar> for Fraction {
@@ -58,6 +58,14 @@ pub mod generics {
 
         fn mul(self, rhs: Scalar) -> Self::Output {
             Self(self.0 * rhs.0)
+        }
+    }
+
+    impl std::ops::Mul<Fraction> for Scalar {
+        type Output = Self;
+
+        fn mul(self, rhs: Fraction) -> Self::Output {
+            Self((self.0 * rhs.dividend) / rhs.divisor)
         }
     }
 
@@ -173,7 +181,7 @@ pub mod equipment {
     }
 
     #[derive(Debug, Deserialize, Clone, Copy, PartialEq)]
-    pub enum Attributes {
+    pub enum Attribute {
         CrystalArmour,
         CrystalBow,
         SalveAmulet,
@@ -211,7 +219,7 @@ pub mod equipment {
                     pub name: String,
                     #[serde(flatten)]
                     pub stats: Stats,
-                    pub attributes: Vec<Attributes>,
+                    pub attributes: Vec<Attribute>,
                 }
 
                 impl HasStats for $struct_name {
@@ -257,6 +265,7 @@ pub mod equipment {
                     pub name: String,
                     #[serde(flatten)]
                     pub stats: Stats,
+                    pub attributes: Vec<Attribute>,
                     pub weapon_stats: WeaponStats,
                 }
 
@@ -293,6 +302,7 @@ pub mod equipment {
                         Self {
                             name: "Empty".to_owned(),
                             stats: Stats::default(),
+                            attributes: Vec::default(),
                             weapon_stats: WeaponStats::default(),
                         }
                     }
@@ -394,6 +404,13 @@ pub mod equipment {
             };
 
             weapon_attack_speed + tick_offset
+        }
+
+        pub fn weapon_has_attribute(&self, attribute: &Attribute) -> bool {
+            match self {
+                Self::OneHanded { weapon, shield: _ } => weapon.attributes.contains(attribute),
+                Self::TwoHanded { weapon } => weapon.attributes.contains(attribute),
+            }
         }
     }
 
@@ -545,7 +562,7 @@ pub mod equipment {
     #[derive(Deserialize, Debug, Clone, Copy)]
     pub struct DamageBonus {
         pub strength: Scalar,
-        pub ranged: Percentage,
+        pub ranged: Scalar,
         pub magic: Percentage,
     }
 
@@ -925,7 +942,7 @@ pub mod unit {
             Ammunition, Body, Cape, CombatOption, Feet, Hands, Head, Legs, Neck, Ring, Stats,
             StyleType, Wielded,
         },
-        generics::{NamedData, Scalar, Tiles, SECONDS_PER_TICK},
+        generics::{Fraction, NamedData, Scalar, Tiles, SECONDS_PER_TICK},
         prayers::Prayer,
     };
 
@@ -984,7 +1001,8 @@ pub mod unit {
     }
 
     impl Player {
-        pub fn equip(&mut self, equipped: Equipped) {
+        #[must_use]
+        pub fn equip(mut self, equipped: Equipped) -> Self {
             self.combat_option = equipped
                 .wielded
                 .combat_boost()
@@ -992,6 +1010,19 @@ pub mod unit {
                 .expect("Should contain at least 3 options")
                 .clone();
             self.equipped = equipped;
+            self
+        }
+
+        #[must_use]
+        pub fn set_levels(mut self, levels: Levels) -> Self {
+            self.levels = levels;
+            self
+        }
+
+        #[must_use]
+        pub fn activate_prayer(mut self, prayer: Prayer) -> Self {
+            self.active_prayers.push(prayer);
+            self
         }
 
         pub fn change_combat_style(&mut self, index: usize) -> Result<(), &str> {
@@ -1006,7 +1037,7 @@ pub mod unit {
                 .fold(crate::prayers::Stats::default(), |acc, p| acc + p.stats)
         }
 
-        pub fn max_melee_accuracy_roll(&self) -> Scalar {
+        pub fn max_melee_accuracy_roll(&self, enemy: &Enemy) -> Scalar {
             let mut effective_attack_level =
                 self.levels.attack * self.prayer_stats().melee_accuracy;
             effective_attack_level += self.combat_option.invisible_boost().attack;
@@ -1022,7 +1053,7 @@ pub mod unit {
             effective_attack_level * (style_bonus + 64.into())
         }
 
-        pub fn max_melee_hit(&self) -> Scalar {
+        pub fn max_melee_hit(&self, enemy: &Enemy) -> Scalar {
             let mut effective_strength_level =
                 self.levels.strength * self.prayer_stats().melee_damage;
             effective_strength_level += self.combat_option.invisible_boost().strength;
@@ -1033,7 +1064,10 @@ pub mod unit {
                 / 640.into()
         }
 
-        pub fn max_ranged_accuracy_roll(&self) -> Scalar {
+        pub fn max_ranged_accuracy_roll(&self, enemy: &Enemy) -> Scalar {
+            use crate::equipment::Attribute::DragonHunterCrossbow;
+            use crate::unit::EnemyAttribute::Dragon;
+
             let mut effective_ranged_level =
                 self.levels.ranged * self.prayer_stats().ranged_accuracy;
             effective_ranged_level += self.combat_option.invisible_boost().ranged;
@@ -1044,34 +1078,70 @@ pub mod unit {
                 _ => unreachable!(),
             };
 
-            effective_ranged_level * (style_bonus + 64.into())
+            let mut attack_roll = effective_ranged_level * (style_bonus + 64.into());
+
+            // Dragon hunter crossbow
+            if self
+                .equipped
+                .wielded
+                .weapon_has_attribute(&DragonHunterCrossbow)
+                & enemy.has_attribute(&Dragon)
+            {
+                attack_roll = attack_roll
+                    * Fraction {
+                        dividend: 13,
+                        divisor: 10,
+                    };
+            }
+
+            attack_roll
         }
 
-        pub fn max_ranged_hit(&self) -> Scalar {
+        pub fn max_ranged_hit(&self, enemy: &Enemy) -> Scalar {
+            use crate::equipment::Attribute::DragonHunterCrossbow;
+            use crate::unit::EnemyAttribute::Dragon;
+
             let mut effective_ranged_level = self.levels.ranged * self.prayer_stats().ranged_damage;
             effective_ranged_level += self.combat_option.invisible_boost().ranged;
             effective_ranged_level += 8.into();
 
-            (effective_ranged_level * (self.equipped.total_stats().damage.ranged + 64.into())
+            let mut max_hit = (effective_ranged_level
+                * (self.equipped.total_stats().damage.ranged + 64.into())
                 + 320.into())
-                / 640.into()
+                / 640.into();
+
+            // Dragon hunter crossbow
+            if self
+                .equipped
+                .wielded
+                .weapon_has_attribute(&DragonHunterCrossbow)
+                & enemy.has_attribute(&Dragon)
+            {
+                max_hit = max_hit
+                    * Fraction {
+                        dividend: 5,
+                        divisor: 4,
+                    };
+            }
+
+            max_hit
         }
 
-        pub fn max_accuracy_roll(&self) -> Scalar {
+        pub fn max_accuracy_roll(&self, enemy: &Enemy) -> Scalar {
             match self.combat_option.style_type {
                 StyleType::Stab | StyleType::Slash | StyleType::Crush => {
-                    self.max_melee_accuracy_roll()
+                    self.max_melee_accuracy_roll(enemy)
                 }
-                StyleType::Ranged => self.max_ranged_accuracy_roll(),
+                StyleType::Ranged => self.max_ranged_accuracy_roll(enemy),
                 StyleType::Magic => todo!(),
                 StyleType::None => todo!(),
             }
         }
 
-        pub fn max_hit(&self) -> Scalar {
+        pub fn max_hit(&self, enemy: &Enemy) -> Scalar {
             match self.combat_option.style_type {
-                StyleType::Stab | StyleType::Slash | StyleType::Crush => self.max_melee_hit(),
-                StyleType::Ranged => self.max_ranged_hit(),
+                StyleType::Stab | StyleType::Slash | StyleType::Crush => self.max_melee_hit(enemy),
+                StyleType::Ranged => self.max_ranged_hit(enemy),
                 StyleType::Magic => todo!(),
                 StyleType::None => todo!(),
             }
@@ -1081,8 +1151,8 @@ pub mod unit {
             let max_enemy_defence_roll: i32 = enemy
                 .max_defence_roll(&self.combat_option.style_type)
                 .into();
-            let max_accuracy_roll: i32 = self.max_accuracy_roll().into();
-            let max_hit: i32 = self.max_hit().into();
+            let max_accuracy_roll: i32 = self.max_accuracy_roll(enemy).into();
+            let max_hit: i32 = self.max_hit(enemy).into();
             let attack_speed: i32 = self
                 .equipped
                 .wielded

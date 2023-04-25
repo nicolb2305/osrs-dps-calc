@@ -1,17 +1,11 @@
 use std::collections::HashMap;
 
-use equipment::Slots;
 use generics::NamedData;
-use prayers::Prayer;
-use unit::Enemy;
-
-use crate::{
-    equipment::Wielded,
-    unit::{Equipped, Levels, Player},
-};
 
 pub mod generics {
     use serde::Deserialize;
+
+    pub const SECONDS_PER_TICK: f64 = 0.6;
 
     pub trait NamedData: for<'a> Deserialize<'a> {
         fn get_name(&self) -> &str;
@@ -56,7 +50,7 @@ pub mod generics {
         }
     }
 
-    #[derive(Deserialize, Debug, Clone, Copy, Default)]
+    #[derive(Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
     pub struct Scalar(i32);
 
     impl std::ops::Mul for Scalar {
@@ -178,6 +172,37 @@ pub mod equipment {
         fn weapon_stats(&self) -> WeaponStats;
     }
 
+    #[derive(Debug, Deserialize, Clone, Copy, PartialEq)]
+    pub enum Attributes {
+        CrystalArmour,
+        CrystalBow,
+        SalveAmulet,
+        SalveAmuletEnchanted,
+        SalveAmuletImbued,
+        SalveAmuletEnchantedImbued,
+        BlackMask,
+        BlackMaskImbued,
+        VoidArmour,
+        VoidHelmMelee,
+        VoidHelmRanged,
+        VoidHelmMagic,
+        RevenantWeapon,
+        DragonHunterLance,
+        Arclight,
+        KerisPartisan,
+        Blisterwood,
+        TzhaarMeleeWeapon,
+        InquisitorArmour,
+        BarroniteMace,
+        Silverlight,
+        IvandisFlail,
+        LeadBladedBattleaxe,
+        ColossalBlade,
+        TwistedBow,
+        DragonHunterCrossbow,
+        SmokeStaff,
+    }
+
     macro_rules! equipment_struct {
         ($($struct_name:tt)*) => {
             $(
@@ -186,6 +211,7 @@ pub mod equipment {
                     pub name: String,
                     #[serde(flatten)]
                     pub stats: Stats,
+                    pub attributes: Vec<Attributes>,
                 }
 
                 impl HasStats for $struct_name {
@@ -214,7 +240,8 @@ pub mod equipment {
                     fn default() -> Self {
                         Self {
                             name: "Empty".to_owned(),
-                            stats: Stats::default()
+                            stats: Stats::default(),
+                            attributes: Vec::default()
                         }
                     }
                 }
@@ -898,7 +925,7 @@ pub mod unit {
             Ammunition, Body, Cape, CombatOption, Feet, Hands, Head, Legs, Neck, Ring, Stats,
             StyleType, Wielded,
         },
-        generics::{NamedData, Scalar},
+        generics::{NamedData, Scalar, Tiles, SECONDS_PER_TICK},
         prayers::Prayer,
     };
 
@@ -907,6 +934,18 @@ pub mod unit {
         pub name: String,
         pub levels: Levels,
         pub stats: Stats,
+        pub attributes: Vec<EnemyAttribute>,
+        pub size: Tiles,
+    }
+
+    #[derive(Debug, Deserialize, Clone, Copy, PartialEq)]
+    pub enum EnemyAttribute {
+        Demon,
+        Raid,
+        Dragon,
+        Golem,
+        Vampyre,
+        Leafy,
     }
 
     impl NamedData for Enemy {
@@ -930,6 +969,10 @@ pub mod unit {
 
             effective_defence_level * (style_defence + 64.into())
         }
+
+        pub fn has_attribute(&self, attribute: &EnemyAttribute) -> bool {
+            self.attributes.contains(attribute)
+        }
     }
 
     #[derive(Debug)]
@@ -951,7 +994,6 @@ pub mod unit {
             self.equipped = equipped;
         }
 
-        #[allow(clippy::missing_errors_doc)]
         pub fn change_combat_style(&mut self, index: usize) -> Result<(), &str> {
             let combat_options = self.equipped.wielded.combat_boost();
             self.combat_option = combat_options.get(index).ok_or("Invalid index")?.clone();
@@ -991,12 +1033,36 @@ pub mod unit {
                 / 640.into()
         }
 
+        pub fn max_ranged_accuracy_roll(&self) -> Scalar {
+            let mut effective_ranged_level =
+                self.levels.ranged * self.prayer_stats().ranged_accuracy;
+            effective_ranged_level += self.combat_option.invisible_boost().ranged;
+            effective_ranged_level += 8.into();
+
+            let style_bonus = match self.combat_option.style_type {
+                StyleType::Ranged => self.equipped.total_stats().attack.ranged,
+                _ => unreachable!(),
+            };
+
+            effective_ranged_level * (style_bonus + 64.into())
+        }
+
+        pub fn max_ranged_hit(&self) -> Scalar {
+            let mut effective_ranged_level = self.levels.ranged * self.prayer_stats().ranged_damage;
+            effective_ranged_level += self.combat_option.invisible_boost().ranged;
+            effective_ranged_level += 8.into();
+
+            (effective_ranged_level * (self.equipped.total_stats().damage.ranged + 64.into())
+                + 320.into())
+                / 640.into()
+        }
+
         pub fn max_accuracy_roll(&self) -> Scalar {
             match self.combat_option.style_type {
                 StyleType::Stab | StyleType::Slash | StyleType::Crush => {
                     self.max_melee_accuracy_roll()
                 }
-                StyleType::Ranged => todo!(),
+                StyleType::Ranged => self.max_ranged_accuracy_roll(),
                 StyleType::Magic => todo!(),
                 StyleType::None => todo!(),
             }
@@ -1005,7 +1071,7 @@ pub mod unit {
         pub fn max_hit(&self) -> Scalar {
             match self.combat_option.style_type {
                 StyleType::Stab | StyleType::Slash | StyleType::Crush => self.max_melee_hit(),
-                StyleType::Ranged => todo!(),
+                StyleType::Ranged => self.max_ranged_hit(),
                 StyleType::Magic => todo!(),
                 StyleType::None => todo!(),
             }
@@ -1034,7 +1100,7 @@ pub mod unit {
                 1f64 - (0.5 * max_enemy_defence_roll / max_accuracy_roll)
             };
 
-            ((hit_rate * max_hit / 2.0) / attack_speed) / 0.6f64
+            ((hit_rate * max_hit / 2.0) / attack_speed) / SECONDS_PER_TICK
         }
     }
 
@@ -1109,7 +1175,7 @@ pub mod unit {
     }
 }
 
-fn read_file<T>(path: &str) -> Result<HashMap<String, T>, Box<dyn std::error::Error>>
+pub fn read_file<T>(path: &str) -> Result<HashMap<String, T>, Box<dyn std::error::Error>>
 where
     T: NamedData,
 {
@@ -1118,47 +1184,4 @@ where
         .into_iter()
         .map(|x| (x.get_name().to_owned(), x))
         .collect::<HashMap<_, _>>())
-}
-
-fn main() {
-    let items = read_file::<Slots>("./data/equipment.json").unwrap();
-    let prayers = read_file::<Prayer>("./data/prayers.json").unwrap();
-    let enemies = read_file::<Enemy>("./data/enemies.json").unwrap();
-
-    if let (
-        Some(Slots::WeaponOneHanded(abyssal_whip)),
-        Some(Slots::Shield(dragon_defender)),
-        Some(piety),
-        Some(fire_giant),
-    ) = (
-        items.get("Abyssal whip"),
-        items.get("Dragon defender"),
-        prayers.get("Piety"),
-        enemies.get("Fire giant (level 86)"),
-    ) {
-        let wielded =
-            Wielded::equip_one_handed(Some(abyssal_whip.clone()), Some(dragon_defender.clone()));
-        let equipped = Equipped {
-            wielded,
-            ..Default::default()
-        };
-        let mut player = Player::default();
-        player.levels = Levels {
-            attack: 99.into(),
-            strength: 99.into(),
-            ..Default::default()
-        };
-        player.equip(equipped);
-        player.change_combat_style(1).unwrap();
-
-        player.active_prayers = vec![piety.clone()];
-
-        dbg!(&player);
-        dbg!(&player.max_accuracy_roll());
-        dbg!(&player.max_hit());
-        dbg!(&fire_giant.max_defence_roll(&equipment::StyleType::Slash));
-        dbg!(&player.dps(fire_giant));
-    }
-    // dbg!(enemies);
-    // dbg!(items);
 }

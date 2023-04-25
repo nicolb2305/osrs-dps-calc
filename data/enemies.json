@@ -31,6 +31,8 @@
                 "magic": 0
             },
             "prayer_bonus": 0
-        }
+        },
+        "attributes": [],
+        "size": 2
     }
 ]

@@ -5,8 +5,7 @@
         "weapon_stats": {
             "weapon_type": "Whip",
             "attack_speed": 4,
-            "range": 1,
-            "two_handed": false
+            "range": 1
         },
         "attack": {
             "stab": 0,
@@ -27,7 +26,8 @@
             "ranged": 0,
             "magic": 0
         },
-        "prayer_bonus": 0
+        "prayer_bonus": 0,
+        "attributes": []
     },
     {
         "name": "Dragon defender",
@@ -51,6 +51,64 @@
             "ranged": 0,
             "magic": 0
         },
-        "prayer_bonus": 0
+        "prayer_bonus": 0,
+        "attributes": []
+    },
+    {
+        "name": "Dragon hunter crossbow",
+        "slot": "WeaponOneHanded",
+        "weapon_stats": {
+            "weapon_type": "Crossbow",
+            "attack_speed": 6,
+            "range": 7
+        },
+        "attack": {
+            "stab": 0,
+            "slash": 0,
+            "crush": 0,
+            "ranged": 95,
+            "magic": 0
+        },
+        "defence": {
+            "stab": 0,
+            "slash": 0,
+            "crush": 0,
+            "ranged": 0,
+            "magic": 0
+        },
+        "damage": {
+            "strength": 0,
+            "ranged": 0,
+            "magic": 0
+        },
+        "prayer_bonus": 0,
+        "attributes": [
+            "DragonHunterCrossbow"
+        ]
+    },
+    {
+        "name": "Dragon bolts",
+        "slot": "Ammunition",
+        "attack": {
+            "stab": 0,
+            "slash": 0,
+            "crush": 0,
+            "ranged": 0,
+            "magic": 0
+        },
+        "defence": {
+            "stab": 0,
+            "slash": 0,
+            "crush": 0,
+            "ranged": 0,
+            "magic": 0
+        },
+        "damage": {
+            "strength": 0,
+            "ranged": 122,
+            "magic": 0
+        },
+        "prayer_bonus": 0,
+        "attributes": []
     }
 ]

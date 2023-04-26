@@ -2,8 +2,8 @@ use serde::Deserialize;
 
 use crate::{
     equipment::{
-        Ammunition, Body, Cape, CombatOption, Feet, Hands, Head, Legs, Neck, PoweredStaff, Ring,
-        Shield, Slots, Stats, StyleType, WeaponOneHanded, Wielded,
+        Ammunition, Attribute, Body, Cape, CombatOption, Feet, Hands, Head, Legs, Neck,
+        PoweredStaff, Ring, Shield, Slots, Stats, StyleType, WeaponOneHanded, Wielded,
     },
     generics::{NamedData, Scalar, Ticks, Tiles, SECONDS_PER_TICK},
     prayers::Prayer,
@@ -434,6 +434,25 @@ pub struct Equipped {
     pub ring: Ring,
 }
 
+trait Callbacks {
+    fn accuracy_roll_callback(&self, value: Scalar, player: &Player, enemy: &Enemy) -> Scalar;
+    fn max_hit_callback(&self, value: Scalar, player: &Player, enemy: &Enemy) -> Scalar;
+}
+
+impl Callbacks for Vec<Attribute> {
+    fn accuracy_roll_callback(&self, value: Scalar, player: &Player, enemy: &Enemy) -> Scalar {
+        self.iter().fold(value, |value, attribute| {
+            (attribute.accuracy_roll_callback())(value, player, enemy)
+        })
+    }
+
+    fn max_hit_callback(&self, value: Scalar, player: &Player, enemy: &Enemy) -> Scalar {
+        self.iter().fold(value, |value, attribute| {
+            (attribute.max_hit_callback())(value, player, enemy)
+        })
+    }
+}
+
 impl Equipped {
     pub fn total_stats(&self) -> Stats {
         self.head.stats
@@ -454,95 +473,67 @@ impl Equipped {
         player: &Player,
         enemy: &Enemy,
     ) -> Scalar {
-        value = self.head.attributes.iter().fold(value, |value, attribute| {
-            (attribute.accuracy_roll_callback())(value, player, enemy)
-        });
-        value = self.cape.attributes.iter().fold(value, |value, attribute| {
-            (attribute.accuracy_roll_callback())(value, player, enemy)
-        });
-        value = self.neck.attributes.iter().fold(value, |value, attribute| {
-            (attribute.accuracy_roll_callback())(value, player, enemy)
-        });
+        value = self
+            .head
+            .attributes
+            .accuracy_roll_callback(value, player, enemy);
+        value = self
+            .cape
+            .attributes
+            .accuracy_roll_callback(value, player, enemy);
+        value = self
+            .neck
+            .attributes
+            .accuracy_roll_callback(value, player, enemy);
         value = self
             .ammunition
             .attributes
-            .iter()
-            .fold(value, |value, attribute| {
-                (attribute.accuracy_roll_callback())(value, player, enemy)
-            });
+            .accuracy_roll_callback(value, player, enemy);
         value = self
             .wielded
             .attributes()
-            .iter()
-            .fold(value, |value, attribute| {
-                (attribute.accuracy_roll_callback())(value, player, enemy)
-            });
-        value = self.body.attributes.iter().fold(value, |value, attribute| {
-            (attribute.accuracy_roll_callback())(value, player, enemy)
-        });
-        value = self.legs.attributes.iter().fold(value, |value, attribute| {
-            (attribute.accuracy_roll_callback())(value, player, enemy)
-        });
+            .accuracy_roll_callback(value, player, enemy);
+        value = self
+            .body
+            .attributes
+            .accuracy_roll_callback(value, player, enemy);
+        value = self
+            .legs
+            .attributes
+            .accuracy_roll_callback(value, player, enemy);
         value = self
             .hands
             .attributes
-            .iter()
-            .fold(value, |value, attribute| {
-                (attribute.accuracy_roll_callback())(value, player, enemy)
-            });
-        value = self.feet.attributes.iter().fold(value, |value, attribute| {
-            (attribute.accuracy_roll_callback())(value, player, enemy)
-        });
-        value = self.ring.attributes.iter().fold(value, |value, attribute| {
-            (attribute.accuracy_roll_callback())(value, player, enemy)
-        });
+            .accuracy_roll_callback(value, player, enemy);
+        value = self
+            .feet
+            .attributes
+            .accuracy_roll_callback(value, player, enemy);
+        value = self
+            .ring
+            .attributes
+            .accuracy_roll_callback(value, player, enemy);
 
         value
     }
 
     pub fn max_hit_callback(&self, mut value: Scalar, player: &Player, enemy: &Enemy) -> Scalar {
-        value = self.head.attributes.iter().fold(value, |value, attribute| {
-            (attribute.max_hit_callback())(value, player, enemy)
-        });
-        value = self.cape.attributes.iter().fold(value, |value, attribute| {
-            (attribute.max_hit_callback())(value, player, enemy)
-        });
-        value = self.neck.attributes.iter().fold(value, |value, attribute| {
-            (attribute.max_hit_callback())(value, player, enemy)
-        });
+        value = self.head.attributes.max_hit_callback(value, player, enemy);
+        value = self.cape.attributes.max_hit_callback(value, player, enemy);
+        value = self.neck.attributes.max_hit_callback(value, player, enemy);
         value = self
             .ammunition
             .attributes
-            .iter()
-            .fold(value, |value, attribute| {
-                (attribute.max_hit_callback())(value, player, enemy)
-            });
+            .max_hit_callback(value, player, enemy);
         value = self
             .wielded
             .attributes()
-            .iter()
-            .fold(value, |value, attribute| {
-                (attribute.max_hit_callback())(value, player, enemy)
-            });
-        value = self.body.attributes.iter().fold(value, |value, attribute| {
-            (attribute.max_hit_callback())(value, player, enemy)
-        });
-        value = self.legs.attributes.iter().fold(value, |value, attribute| {
-            (attribute.max_hit_callback())(value, player, enemy)
-        });
-        value = self
-            .hands
-            .attributes
-            .iter()
-            .fold(value, |value, attribute| {
-                (attribute.max_hit_callback())(value, player, enemy)
-            });
-        value = self.feet.attributes.iter().fold(value, |value, attribute| {
-            (attribute.max_hit_callback())(value, player, enemy)
-        });
-        value = self.ring.attributes.iter().fold(value, |value, attribute| {
-            (attribute.max_hit_callback())(value, player, enemy)
-        });
+            .max_hit_callback(value, player, enemy);
+        value = self.body.attributes.max_hit_callback(value, player, enemy);
+        value = self.legs.attributes.max_hit_callback(value, player, enemy);
+        value = self.hands.attributes.max_hit_callback(value, player, enemy);
+        value = self.feet.attributes.max_hit_callback(value, player, enemy);
+        value = self.ring.attributes.max_hit_callback(value, player, enemy);
 
         value
     }

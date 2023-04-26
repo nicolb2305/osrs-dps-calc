@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use lazy_static::lazy_static;
 use osrs_dps_calc::{
     equipment::{Slots, StyleType},
     generics::read_file,
@@ -10,52 +11,42 @@ use osrs_dps_calc::{
 
 type TResult<T> = Result<T, Box<dyn std::error::Error>>;
 
+lazy_static! {
+    static ref ITEMS: HashMap<String, Slots> = read_file("./data/equipment.json").unwrap();
+    static ref PRAYERS: HashMap<String, Prayer> = read_file("./data/prayers.json").unwrap();
+    static ref SPELLS: HashMap<String, Spell> = read_file("./data/spells.json").unwrap();
+    static ref ENEMIES: HashMap<String, Enemy> = read_file("./data/enemies.json").unwrap();
+}
+
 struct PlayerConstructor {
-    items: HashMap<String, Slots>,
-    prayers: HashMap<String, Prayer>,
-    spells: HashMap<String, Spell>,
     player: Player,
 }
 
 impl PlayerConstructor {
-    fn new() -> TResult<Self> {
-        let items = read_file::<Slots>("./data/equipment.json")?;
-        let prayers = read_file::<Prayer>("./data/prayers.json")?;
-        let spells = read_file::<Spell>("./data/spells.json")?;
-        let player = Player::default();
-
-        Ok(Self {
-            items,
-            prayers,
-            spells,
-            player,
-        })
+    fn new() -> PlayerConstructor {
+        Self {
+            player: Player::default(),
+        }
     }
 
     fn equip(mut self, slot: &str) -> TResult<Self> {
         self.player = self
             .player
-            .equip(self.items.get(slot).ok_or("Could not find item")?.clone());
+            .equip(ITEMS.get(slot).ok_or("Could not find item")?.clone());
         Ok(self)
     }
 
     fn activate_prayer(mut self, prayer: &str) -> TResult<Self> {
-        self.player = self.player.activate_prayer(
-            self.prayers
-                .get(prayer)
-                .ok_or("Could not find prayer")?
-                .clone(),
-        );
+        self.player = self
+            .player
+            .activate_prayer(PRAYERS.get(prayer).ok_or("Could not find prayer")?.clone());
         Ok(self)
     }
 
     fn select_spell(mut self, spell: &str) -> TResult<Self> {
-        self.player = self.player.select_spell(
-            self.spells
-                .get(spell)
-                .ok_or("Could not find spell")?
-                .clone(),
-        );
+        self.player = self
+            .player
+            .select_spell(SPELLS.get(spell).ok_or("Could not find spell")?.clone());
         Ok(self)
     }
 
@@ -65,8 +56,7 @@ impl PlayerConstructor {
 }
 
 fn create_enemy(enemy: &str) -> TResult<Enemy> {
-    let enemies = read_file::<Enemy>("./data/enemies.json")?;
-    Ok(enemies.get(enemy).ok_or("Could not find enemy")?.clone())
+    Ok(ENEMIES.get(enemy).ok_or("Could not find enemy")?.clone())
 }
 
 fn assert_float_eq(lhs: f64, rhs: f64) {
@@ -78,7 +68,7 @@ fn assert_float_eq(lhs: f64, rhs: f64) {
 
 #[test]
 fn test_standard_melee_accuracy() -> TResult<()> {
-    let mut player = PlayerConstructor::new()?
+    let mut player = PlayerConstructor::new()
         .equip("Abyssal whip")?
         .equip("Dragon defender")?
         .activate_prayer("Piety")?
@@ -91,7 +81,7 @@ fn test_standard_melee_accuracy() -> TResult<()> {
 
 #[test]
 fn test_standard_melee_max_hit() -> TResult<()> {
-    let mut player = PlayerConstructor::new()?
+    let mut player = PlayerConstructor::new()
         .equip("Abyssal whip")?
         .equip("Dragon defender")?
         .activate_prayer("Piety")?
@@ -111,7 +101,7 @@ fn test_enemy_slash_defence() -> TResult<()> {
 
 #[test]
 fn test_standard_melee_dps_vs_enemy() -> TResult<()> {
-    let mut player = PlayerConstructor::new()?
+    let mut player = PlayerConstructor::new()
         .equip("Abyssal whip")?
         .equip("Dragon defender")?
         .activate_prayer("Piety")?
@@ -124,7 +114,7 @@ fn test_standard_melee_dps_vs_enemy() -> TResult<()> {
 
 #[test]
 fn test_dragon_hunter_crossbow_accuracy() -> TResult<()> {
-    let mut player = PlayerConstructor::new()?
+    let mut player = PlayerConstructor::new()
         .equip("Dragon hunter crossbow")?
         .equip("Dragon bolts")?
         .activate_prayer("Rigour")?
@@ -137,7 +127,7 @@ fn test_dragon_hunter_crossbow_accuracy() -> TResult<()> {
 
 #[test]
 fn test_dragon_hunter_crossbow_max_hit() -> TResult<()> {
-    let mut player = PlayerConstructor::new()?
+    let mut player = PlayerConstructor::new()
         .equip("Dragon hunter crossbow")?
         .equip("Dragon bolts")?
         .activate_prayer("Rigour")?
@@ -150,7 +140,7 @@ fn test_dragon_hunter_crossbow_max_hit() -> TResult<()> {
 
 #[test]
 fn test_dragon_hunter_crossbow_dps() -> TResult<()> {
-    let mut player = PlayerConstructor::new()?
+    let mut player = PlayerConstructor::new()
         .equip("Dragon hunter crossbow")?
         .equip("Dragon bolts")?
         .activate_prayer("Rigour")?
@@ -163,7 +153,7 @@ fn test_dragon_hunter_crossbow_dps() -> TResult<()> {
 
 #[test]
 fn test_colossal_blade_dps() -> TResult<()> {
-    let player = PlayerConstructor::new()?
+    let player = PlayerConstructor::new()
         .equip("Colossal blade")?
         .activate_prayer("Piety")?
         .build();
@@ -174,7 +164,7 @@ fn test_colossal_blade_dps() -> TResult<()> {
 
 #[test]
 fn test_wind_bolt_dps() -> TResult<()> {
-    let player = PlayerConstructor::new()?.select_spell("Wind Bolt")?.build();
+    let player = PlayerConstructor::new().select_spell("Wind Bolt")?.build();
     let enemy = create_enemy("Fire giant (level 86)").unwrap();
     assert_float_eq(player.dps(&enemy), 1.430_348_618_544_771);
     Ok(())
@@ -182,7 +172,7 @@ fn test_wind_bolt_dps() -> TResult<()> {
 
 #[test]
 fn test_trident_of_the_swamp() -> TResult<()> {
-    let player = PlayerConstructor::new()?
+    let player = PlayerConstructor::new()
         .equip("Trident of the swamp")?
         .activate_prayer("Mystic Might")?
         .build();

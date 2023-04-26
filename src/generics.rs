@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::{collections::HashMap, ops::Deref};
 
 use serde::Deserialize;
@@ -194,7 +195,7 @@ impl From<Ticks> for i32 {
 
 /// # Errors
 /// Returns an error if the given file cannot be found
-pub fn read_file<T>(path: &str) -> Result<HashMap<String, T>, Box<dyn std::error::Error>>
+pub fn read_file<T>(path: &str) -> Result<HashMap<String, T>>
 where
     T: NamedData,
 {

@@ -409,13 +409,13 @@ pub struct Levels {
 impl Default for Levels {
     fn default() -> Self {
         Self {
-            hitpoints: 10.into(),
-            attack: 1.into(),
-            strength: 1.into(),
-            defence: 1.into(),
-            ranged: 1.into(),
-            magic: 1.into(),
-            prayer: 1.into(),
+            hitpoints: 99.into(),
+            attack: 99.into(),
+            strength: 99.into(),
+            defence: 99.into(),
+            ranged: 99.into(),
+            magic: 99.into(),
+            prayer: 99.into(),
         }
     }
 }

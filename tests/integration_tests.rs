@@ -18,12 +18,12 @@ lazy_static! {
     static ref ENEMIES: HashMap<String, Enemy> = read_file("./data/enemies.json").unwrap();
 }
 
-struct PlayerConstructor {
-    player: Player,
+struct PlayerConstructor<'a> {
+    player: Player<'a>,
 }
 
-impl PlayerConstructor {
-    fn new() -> PlayerConstructor {
+impl<'a> PlayerConstructor<'a> {
+    fn new() -> PlayerConstructor<'a> {
         Self {
             player: Player::default(),
         }
@@ -32,31 +32,31 @@ impl PlayerConstructor {
     fn equip(mut self, slot: &str) -> TResult<Self> {
         self.player = self
             .player
-            .equip(ITEMS.get(slot).ok_or("Could not find item")?.clone());
+            .equip(ITEMS.get(slot).ok_or("Could not find item")?);
         Ok(self)
     }
 
     fn activate_prayer(mut self, prayer: &str) -> TResult<Self> {
         self.player = self
             .player
-            .activate_prayer(PRAYERS.get(prayer).ok_or("Could not find prayer")?.clone());
+            .activate_prayer(PRAYERS.get(prayer).ok_or("Could not find prayer")?);
         Ok(self)
     }
 
     fn select_spell(mut self, spell: &str) -> TResult<Self> {
         self.player = self
             .player
-            .select_spell(SPELLS.get(spell).ok_or("Could not find spell")?.clone());
+            .select_spell(SPELLS.get(spell).ok_or("Could not find spell")?);
         Ok(self)
     }
 
-    fn build(self) -> Player {
+    fn build(self) -> Player<'a> {
         self.player
     }
 }
 
-fn create_enemy(enemy: &str) -> TResult<Enemy> {
-    Ok(ENEMIES.get(enemy).ok_or("Could not find enemy")?.clone())
+fn create_enemy(enemy: &str) -> TResult<&Enemy> {
+    Ok(ENEMIES.get(enemy).ok_or("Could not find enemy")?)
 }
 
 fn assert_float_eq(lhs: f64, rhs: f64) {
@@ -75,7 +75,7 @@ fn test_standard_melee_accuracy() -> TResult<()> {
         .build();
     let enemy = create_enemy("Fire giant (level 86)")?;
     player.change_combat_style(1)?;
-    assert_eq!(player.max_accuracy_roll(&enemy), 21590.into());
+    assert_eq!(player.max_accuracy_roll(enemy), 21590.into());
     Ok(())
 }
 
@@ -88,7 +88,7 @@ fn test_standard_melee_max_hit() -> TResult<()> {
         .build();
     let enemy = create_enemy("Fire giant (level 86)")?;
     player.change_combat_style(1)?;
-    assert_eq!(player.max_hit(&enemy), 31.into());
+    assert_eq!(player.max_hit(enemy), 31.into());
     Ok(())
 }
 
@@ -108,7 +108,7 @@ fn test_standard_melee_dps_vs_enemy() -> TResult<()> {
         .build();
     player.change_combat_style(1)?;
     let enemy = create_enemy("Fire giant (level 86)")?;
-    assert_float_eq(player.dps(&enemy), 5.716_511_895_388_511_5);
+    assert_float_eq(player.dps(enemy), 5.716_511_895_388_511_5);
     Ok(())
 }
 
@@ -121,7 +121,7 @@ fn test_dragon_hunter_crossbow_accuracy() -> TResult<()> {
         .build();
     player.change_combat_style(1)?;
     let enemy = create_enemy("Mithril dragon")?;
-    assert_eq!(player.max_accuracy_roll(&enemy), 26044.into());
+    assert_eq!(player.max_accuracy_roll(enemy), 26044.into());
     Ok(())
 }
 
@@ -134,7 +134,7 @@ fn test_dragon_hunter_crossbow_max_hit() -> TResult<()> {
         .build();
     player.change_combat_style(1)?;
     let enemy = create_enemy("Mithril dragon")?;
-    assert_eq!(player.max_hit(&enemy), 46.into());
+    assert_eq!(player.max_hit(enemy), 46.into());
     Ok(())
 }
 
@@ -147,7 +147,7 @@ fn test_dragon_hunter_crossbow_dps() -> TResult<()> {
         .build();
     player.change_combat_style(1)?;
     let enemy = create_enemy("Mithril dragon")?;
-    assert_float_eq(player.dps(&enemy), 2.340_311_149_659_705);
+    assert_float_eq(player.dps(enemy), 2.340_311_149_659_705);
     Ok(())
 }
 
@@ -158,7 +158,7 @@ fn test_colossal_blade_dps() -> TResult<()> {
         .activate_prayer("Piety")?
         .build();
     let enemy = create_enemy("Fire giant (level 86)")?;
-    assert_float_eq(player.dps(&enemy), 4.529_077_680_484_447);
+    assert_float_eq(player.dps(enemy), 4.529_077_680_484_447);
     Ok(())
 }
 
@@ -166,7 +166,7 @@ fn test_colossal_blade_dps() -> TResult<()> {
 fn test_wind_bolt_dps() -> TResult<()> {
     let player = PlayerConstructor::new().select_spell("Wind Bolt")?.build();
     let enemy = create_enemy("Fire giant (level 86)").unwrap();
-    assert_float_eq(player.dps(&enemy), 1.430_348_618_544_771);
+    assert_float_eq(player.dps(enemy), 1.430_348_618_544_771);
     Ok(())
 }
 
@@ -177,6 +177,6 @@ fn test_trident_of_the_swamp() -> TResult<()> {
         .activate_prayer("Mystic Might")?
         .build();
     let enemy = create_enemy("Mithril dragon")?;
-    assert_float_eq(player.dps(&enemy), 2.141_780_355_389_947_5);
+    assert_float_eq(player.dps(enemy), 2.141_780_355_389_947_5);
     Ok(())
 }

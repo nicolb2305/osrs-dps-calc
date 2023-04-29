@@ -2,15 +2,14 @@ mod weapon_callbacks;
 
 use crate::{
     equipment::weapon_callbacks::{
-        colossal_blade, dragon_hunter_crossbow_accuracy, dragon_hunter_crossbow_max_hit, identity,
-        salve_amulet,
+        colossal_blade, dragon_hunter_crossbow_accuracy, dragon_hunter_crossbow_max_hit,
+        harmonised_nightmare_staff_attack_speed, identity, salve_amulet,
     },
     generics::{NamedData, Percentage, Scalar, Ticks, Tiles},
     unit::{Enemy, Player},
 };
+use lazy_static::lazy_static;
 use serde::Deserialize;
-
-use self::weapon_callbacks::harmonised_nightmare_staff_attack_speed;
 
 pub trait HasStats: for<'a> Deserialize<'a> {
     fn inner(&self) -> &Equipment;
@@ -78,7 +77,7 @@ impl Attribute {
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone, Default)]
 pub struct Equipment {
     pub name: String,
     #[serde(flatten)]
@@ -87,7 +86,7 @@ pub struct Equipment {
 }
 
 macro_rules! equipment_struct {
-    ($($struct_name:tt)*) => {
+    ($($struct_name:ident)*) => {
         $(
             #[derive(Deserialize, Debug, Clone)]
             pub struct $struct_name {
@@ -117,7 +116,7 @@ macro_rules! equipment_struct {
 }
 
 macro_rules! weapon_struct {
-    ($($struct_name:tt)*) => {
+    ($($struct_name:ident)*) => {
         $(
             #[derive(Deserialize, Debug, Clone)]
             pub struct $struct_name {
@@ -186,58 +185,67 @@ pub struct Stats {
     pub prayer_bonus: Scalar,
 }
 
-#[derive(Deserialize, Debug, Clone)]
-pub enum Wielded {
+#[derive(Debug, Clone)]
+pub enum Wielded<'a> {
     OneHanded {
-        weapon: WeaponOneHanded,
-        shield: Shield,
+        weapon: Option<&'a WeaponOneHanded>,
+        shield: Option<&'a Shield>,
     },
     TwoHanded {
-        weapon: WeaponTwoHanded,
+        weapon: Option<&'a WeaponTwoHanded>,
     },
 }
 
-impl Default for Wielded {
+impl Default for Wielded<'_> {
     fn default() -> Self {
         Self::OneHanded {
-            weapon: WeaponOneHanded::default(),
-            shield: Shield::default(),
+            weapon: None,
+            shield: None,
         }
     }
 }
 
-impl Wielded {
-    pub fn equip_one_handed(weapon: Option<WeaponOneHanded>, shield: Option<Shield>) -> Wielded {
-        Self::OneHanded {
-            weapon: weapon.unwrap_or_default(),
-            shield: shield.unwrap_or_default(),
-        }
+impl<'a> Wielded<'a> {
+    pub fn equip_one_handed(
+        weapon: Option<&'a WeaponOneHanded>,
+        shield: Option<&'a Shield>,
+    ) -> Self {
+        Self::OneHanded { weapon, shield }
     }
 
-    pub fn equip_two_handed(weapon: Option<WeaponTwoHanded>) -> Wielded {
-        Self::TwoHanded {
-            weapon: weapon.unwrap_or_default(),
-        }
+    pub fn equip_two_handed(weapon: Option<&'a WeaponTwoHanded>) -> Self {
+        Self::TwoHanded { weapon }
     }
 
     pub fn combat_boost(&self) -> Vec<CombatOption> {
         match self {
-            Self::OneHanded { weapon, shield: _ } => weapon.weapon_stats.weapon_type.combat_boost(),
-            Self::TwoHanded { weapon } => weapon.weapon_stats.weapon_type.combat_boost(),
+            Self::OneHanded { weapon, shield: _ } => weapon
+                .unwrap_or_default()
+                .weapon_stats
+                .weapon_type
+                .combat_boost(),
+            Self::TwoHanded { weapon } => weapon
+                .unwrap_or_default()
+                .weapon_stats
+                .weapon_type
+                .combat_boost(),
         }
     }
 
     pub fn stats(&self) -> Stats {
         match self {
-            Self::OneHanded { weapon, shield } => weapon.inner.stats + shield.inner.stats,
-            Self::TwoHanded { weapon } => weapon.inner.stats,
+            Self::OneHanded { weapon, shield } => {
+                weapon.unwrap_or_default().inner.stats
+                    + shield.unwrap_or(&DEFAULT_ITEM_SHIELD).inner.stats
+            }
+            Self::TwoHanded { weapon } => weapon.unwrap_or_default().inner.stats,
         }
     }
 
     pub fn weapon_stats(&self) -> WeaponStats {
         match self {
-            Self::OneHanded { weapon, shield: _ } => weapon.weapon_stats,
-            Self::TwoHanded { weapon } => weapon.weapon_stats,
+            Self::OneHanded { weapon, shield: _ } => weapon.unwrap_or_default().weapon_stats,
+            Self::TwoHanded { weapon } => weapon.unwrap_or_default().weapon_stats,
         }
     }
 
@@ -245,8 +253,10 @@ impl Wielded {
         let tick_offset = combat_style.invisible_boost().attack_speed;
 
         let weapon_attack_speed = match self {
-            Self::OneHanded { weapon, shield: _ } => weapon.weapon_stats.attack_speed,
-            Self::TwoHanded { weapon } => weapon.weapon_stats.attack_speed,
+            Self::OneHanded { weapon, shield: _ } => {
+                weapon.unwrap_or_default().weapon_stats.attack_speed
+            }
+            Self::TwoHanded { weapon } => weapon.unwrap_or_default().weapon_stats.attack_speed,
         };
 
         weapon_attack_speed + tick_offset
@@ -254,8 +264,8 @@ impl Wielded {
 
     pub fn attributes(&self) -> &Vec<Attribute> {
         match self {
-            Self::OneHanded { weapon, shield: _ } => &weapon.inner.attributes,
-            Self::TwoHanded { weapon } => &weapon.inner.attributes,
+            Self::OneHanded { weapon, shield: _ } => &weapon.unwrap_or_default().inner.attributes,
+            Self::TwoHanded { weapon } => &weapon.unwrap_or_default().inner.attributes,
         }
     }
 
@@ -453,6 +463,23 @@ impl CombatOption {
 }
 
 #[derive(Deserialize, Debug, Clone, Copy)]
+pub struct WeaponStats {
+    pub weapon_type: WeaponType,
+    pub attack_speed: Ticks,
+    pub range: Tiles,
+}
+
+impl Default for WeaponStats {
+    fn default() -> Self {
+        Self {
+            weapon_type: WeaponType::Unarmed,
+            attack_speed: 4.into(),
+            range: 1.into(),
+        }
+    }
+}
+
+#[derive(Deserialize, Debug, Clone, Copy)]
 pub enum WeaponType {
     TwoHandedSword,
     Axe,
@@ -624,19 +651,119 @@ impl WeaponType {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, Copy)]
-pub struct WeaponStats {
-    pub weapon_type: WeaponType,
-    pub attack_speed: Ticks,
-    pub range: Tiles,
+lazy_static! {
+    static ref DEFAULT_ITEM_EQUIPMENT: Equipment = Equipment {
+        name: "Empty".to_string(),
+        ..Default::default()
+    };
+    static ref DEFAULT_ITEM_WEAPON_ONE_HANDED: WeaponOneHanded = WeaponOneHanded {
+        inner: DEFAULT_ITEM_EQUIPMENT.clone(),
+        ..Default::default()
+    };
+    static ref DEFAULT_ITEM_WEAPON_TWO_HANDED: WeaponTwoHanded = WeaponTwoHanded {
+        inner: DEFAULT_ITEM_EQUIPMENT.clone(),
+        ..Default::default()
+    };
+    static ref DEFAULT_ITEM_SHIELD: Shield = Shield {
+        inner: DEFAULT_ITEM_EQUIPMENT.clone()
+    };
+    static ref DEFAULT_ITEM_HEAD: Head = Head {
+        inner: DEFAULT_ITEM_EQUIPMENT.clone()
+    };
+    static ref DEFAULT_ITEM_CAPE: Cape = Cape {
+        inner: DEFAULT_ITEM_EQUIPMENT.clone()
+    };
+    static ref DEFAULT_ITEM_NECK: Neck = Neck {
+        inner: DEFAULT_ITEM_EQUIPMENT.clone()
+    };
+    static ref DEFAULT_ITEM_AMMUNITION: Ammunition = Ammunition {
+        inner: DEFAULT_ITEM_EQUIPMENT.clone()
+    };
+    static ref DEFAULT_ITEM_BODY: Body = Body {
+        inner: DEFAULT_ITEM_EQUIPMENT.clone()
+    };
+    static ref DEFAULT_ITEM_LEGS: Legs = Legs {
+        inner: DEFAULT_ITEM_EQUIPMENT.clone()
+    };
+    static ref DEFAULT_ITEM_HANDS: Hands = Hands {
+        inner: DEFAULT_ITEM_EQUIPMENT.clone()
+    };
+    static ref DEFAULT_ITEM_FEET: Feet = Feet {
+        inner: DEFAULT_ITEM_EQUIPMENT.clone()
+    };
+    static ref DEFAULT_ITEM_RING: Ring = Ring {
+        inner: DEFAULT_ITEM_EQUIPMENT.clone()
+    };
 }
 
-impl Default for WeaponStats {
+impl Default for &WeaponOneHanded {
     fn default() -> Self {
-        Self {
-            weapon_type: WeaponType::Unarmed,
-            attack_speed: 4.into(),
-            range: 1.into(),
-        }
+        &DEFAULT_ITEM_WEAPON_ONE_HANDED
+    }
+}
+
+impl Default for &WeaponTwoHanded {
+    fn default() -> Self {
+        &DEFAULT_ITEM_WEAPON_TWO_HANDED
+    }
+}
+
+impl Default for &Shield {
+    fn default() -> Self {
+        &DEFAULT_ITEM_SHIELD
+    }
+}
+
+impl Default for &Head {
+    fn default() -> Self {
+        &DEFAULT_ITEM_HEAD
+    }
+}
+
+impl Default for &Cape {
+    fn default() -> Self {
+        &DEFAULT_ITEM_CAPE
+    }
+}
+
+impl Default for &Neck {
+    fn default() -> Self {
+        &DEFAULT_ITEM_NECK
+    }
+}
+
+impl Default for &Ammunition {
+    fn default() -> Self {
+        &DEFAULT_ITEM_AMMUNITION
+    }
+}
+
+impl Default for &Body {
+    fn default() -> Self {
+        &DEFAULT_ITEM_BODY
+    }
+}
+
+impl Default for &Legs {
+    fn default() -> Self {
+        &DEFAULT_ITEM_LEGS
+    }
+}
+
+impl Default for &Hands {
+    fn default() -> Self {
+        &DEFAULT_ITEM_HANDS
+    }
+}
+
+impl Default for &Feet {
+    fn default() -> Self {
+        &DEFAULT_ITEM_FEET
+    }
+}
+
+impl Default for &Ring {
+    fn default() -> Self {
+        &DEFAULT_ITEM_RING
     }
 }

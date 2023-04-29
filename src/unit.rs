@@ -3,7 +3,7 @@ use serde::Deserialize;
 use crate::{
     equipment::{
         Ammunition, Attribute, Body, Cape, CombatOption, Equipment, Feet, Hands, HasStats, Head,
-        Legs, Neck, PoweredStaff, Ring, Shield, Slots, Stats, StyleType, WeaponOneHanded, Wielded,
+        Legs, Neck, PoweredStaff, Ring, Slots, Stats, StyleType, Wielded,
     },
     generics::{NamedData, Scalar, Ticks, Tiles, SECONDS_PER_TICK},
     prayers::Prayer,
@@ -81,31 +81,26 @@ impl Default for Extra {
 }
 
 #[derive(Debug)]
-pub struct Player {
+pub struct Player<'a> {
     pub levels: Levels,
-    equipped: Equipped,
-    pub active_prayers: Vec<Prayer>,
+    equipped: Equipped<'a>,
+    pub active_prayers: Vec<&'a Prayer>,
     combat_option: CombatOption,
-    pub spell: Option<Spell>,
+    pub spell: Option<&'a Spell>,
     pub extra: Extra,
 }
 
-impl Player {
+impl<'a> Player<'a> {
     #[must_use]
-    pub fn equip_full(mut self, equipped: Equipped) -> Self {
+    pub fn equip_full(mut self, equipped: Equipped<'a>) -> Self {
         self.equipped = equipped;
         self.update_combat_option();
         self
     }
 
     fn update_combat_option(&mut self) {
-        self.combat_option = self
-            .equipped
-            .wielded
-            .combat_boost()
-            .get(0)
-            .expect("Should contain at least 3 options")
-            .clone();
+        // Should not panic as there should always be at least 3 combat options
+        self.combat_option = self.equipped.wielded.combat_boost().remove(0);
     }
 
     #[must_use]
@@ -115,73 +110,57 @@ impl Player {
     }
 
     #[must_use]
-    pub fn activate_prayer(mut self, prayer: Prayer) -> Self {
+    pub fn activate_prayer(mut self, prayer: &'a Prayer) -> Self {
         self.active_prayers.push(prayer);
         self
     }
 
     #[must_use]
-    pub fn select_spell(mut self, spell: Spell) -> Self {
+    pub fn select_spell(mut self, spell: &'a Spell) -> Self {
         self.spell = Some(spell);
         self
     }
 
     #[must_use]
-    pub fn equip(mut self, slot: Slots) -> Self {
+    pub fn equip(mut self, slot: &'a Slots) -> Self {
         match slot {
-            Slots::Head(head) => self.equipped.head = head,
-            Slots::Cape(cape) => self.equipped.cape = cape,
-            Slots::Neck(neck) => self.equipped.neck = neck,
-            Slots::Ammunition(ammunition) => self.equipped.ammunition = ammunition,
+            Slots::Head(head) => self.equipped.head = Some(head),
+            Slots::Cape(cape) => self.equipped.cape = Some(cape),
+            Slots::Neck(neck) => self.equipped.neck = Some(neck),
+            Slots::Ammunition(ammunition) => self.equipped.ammunition = Some(ammunition),
             Slots::WeaponOneHanded(weapon_one_handed) => {
                 match self.equipped.wielded {
-                    Wielded::OneHanded {
-                        ref mut weapon,
-                        shield: _,
-                    } => *weapon = weapon_one_handed,
+                    Wielded::OneHanded { weapon: _, shield } => {
+                        self.equipped.wielded =
+                            Wielded::equip_one_handed(Some(weapon_one_handed), shield);
+                    }
                     Wielded::TwoHanded { weapon: _ } => {
-                        self.equipped.wielded = Wielded::OneHanded {
-                            weapon: weapon_one_handed,
-                            shield: Shield::default(),
-                        }
+                        self.equipped.wielded =
+                            Wielded::equip_one_handed(Some(weapon_one_handed), None);
                     }
                 };
                 self.update_combat_option();
             }
             Slots::WeaponTwoHanded(weapon_two_handed) => {
-                match self.equipped.wielded {
-                    Wielded::OneHanded {
-                        weapon: _,
-                        shield: _,
-                    } => {
-                        self.equipped.wielded = Wielded::TwoHanded {
-                            weapon: weapon_two_handed,
-                        }
-                    }
-                    Wielded::TwoHanded { ref mut weapon } => *weapon = weapon_two_handed,
-                };
+                self.equipped.wielded = Wielded::equip_two_handed(Some(weapon_two_handed));
                 self.update_combat_option();
             }
-            Slots::Body(body) => self.equipped.body = body,
+            Slots::Body(body) => self.equipped.body = Some(body),
             Slots::Shield(new_shield) => {
                 match self.equipped.wielded {
-                    Wielded::OneHanded {
-                        weapon: _,
-                        ref mut shield,
-                    } => *shield = new_shield,
+                    Wielded::OneHanded { weapon, shield: _ } => {
+                        self.equipped.wielded = Wielded::equip_one_handed(weapon, Some(new_shield));
+                    }
                     Wielded::TwoHanded { weapon: _ } => {
-                        self.equipped.wielded = Wielded::OneHanded {
-                            weapon: WeaponOneHanded::default(),
-                            shield: new_shield,
-                        }
+                        self.equipped.wielded = Wielded::equip_one_handed(None, Some(new_shield));
                     }
                 };
                 self.update_combat_option();
             }
-            Slots::Legs(legs) => self.equipped.legs = legs,
-            Slots::Hands(hands) => self.equipped.hands = hands,
-            Slots::Feet(feet) => self.equipped.feet = feet,
-            Slots::Ring(ring) => self.equipped.ring = ring,
+            Slots::Legs(legs) => self.equipped.legs = Some(legs),
+            Slots::Hands(hands) => self.equipped.hands = Some(hands),
+            Slots::Feet(feet) => self.equipped.feet = Some(feet),
+            Slots::Ring(ring) => self.equipped.ring = Some(ring),
         };
 
         self
@@ -198,9 +177,13 @@ impl Player {
     /// # Errors
     /// Returns an error if the index is invalid for the currently wielded weapon
     pub fn change_combat_style(&mut self, index: usize) -> Result<(), &str> {
-        let combat_options = self.equipped.wielded.combat_boost();
-        self.combat_option = combat_options.get(index).ok_or("Invalid index")?.clone();
-        Ok(())
+        let mut combat_options = self.equipped.wielded.combat_boost();
+        if index < combat_options.len() {
+            self.combat_option = combat_options.remove(index);
+            Ok(())
+        } else {
+            Err("Invalid index")
+        }
     }
 
     pub fn prayer_stats(&self) -> crate::prayers::Stats {
@@ -377,18 +360,13 @@ impl Player {
     }
 }
 
-impl Default for Player {
+impl Default for Player<'_> {
     fn default() -> Self {
         Self {
             levels: Levels::default(),
             equipped: Equipped::default(),
             active_prayers: Vec::default(),
-            combat_option: Equipped::default()
-                .wielded
-                .combat_boost()
-                .get(0)
-                .expect("Should contain at least 3 options")
-                .clone(),
+            combat_option: Equipped::default().wielded.combat_boost().remove(0),
             spell: None,
             extra: Extra::default(),
         }
@@ -421,17 +399,17 @@ impl Default for Levels {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Equipped {
-    pub head: Head,
-    pub cape: Cape,
-    pub neck: Neck,
-    pub ammunition: Ammunition,
-    pub wielded: Wielded,
-    pub body: Body,
-    pub legs: Legs,
-    pub hands: Hands,
-    pub feet: Feet,
-    pub ring: Ring,
+pub struct Equipped<'a> {
+    pub head: Option<&'a Head>,
+    pub cape: Option<&'a Cape>,
+    pub neck: Option<&'a Neck>,
+    pub ammunition: Option<&'a Ammunition>,
+    pub wielded: Wielded<'a>,
+    pub body: Option<&'a Body>,
+    pub legs: Option<&'a Legs>,
+    pub hands: Option<&'a Hands>,
+    pub feet: Option<&'a Feet>,
+    pub ring: Option<&'a Ring>,
 }
 
 trait Callbacks {
@@ -454,7 +432,7 @@ impl Callbacks for Vec<Attribute> {
 }
 
 pub struct EquippedIter<'a> {
-    inner: &'a Equipped,
+    inner: &'a Equipped<'a>,
     index: u8,
 }
 
@@ -463,15 +441,15 @@ impl<'a> Iterator for EquippedIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let ret = match self.index {
-            0 => self.inner.head.inner(),
-            1 => self.inner.cape.inner(),
-            2 => self.inner.neck.inner(),
-            3 => self.inner.ammunition.inner(),
-            4 => self.inner.body.inner(),
-            5 => self.inner.legs.inner(),
-            6 => self.inner.hands.inner(),
-            7 => self.inner.feet.inner(),
-            8 => self.inner.ring.inner(),
+            0 => self.inner.head.unwrap_or_default().inner(),
+            1 => self.inner.cape.unwrap_or_default().inner(),
+            2 => self.inner.neck.unwrap_or_default().inner(),
+            3 => self.inner.ammunition.unwrap_or_default().inner(),
+            4 => self.inner.body.unwrap_or_default().inner(),
+            5 => self.inner.legs.unwrap_or_default().inner(),
+            6 => self.inner.hands.unwrap_or_default().inner(),
+            7 => self.inner.feet.unwrap_or_default().inner(),
+            8 => self.inner.ring.unwrap_or_default().inner(),
             _ => return None,
         };
         self.index += 1;
@@ -479,7 +457,7 @@ impl<'a> Iterator for EquippedIter<'a> {
     }
 }
 
-impl Equipped {
+impl Equipped<'_> {
     pub fn iter(&self) -> EquippedIter {
         EquippedIter {
             inner: self,
@@ -537,9 +515,11 @@ impl Equipped {
             player.levels.magic / Scalar::new(i) - Scalar::new(j)
         }
 
-        match &self.wielded {
-            Wielded::OneHanded { weapon, shield: _ } => weapon.powered_staff_type,
-            Wielded::TwoHanded { weapon } => weapon.powered_staff_type,
+        match self.wielded {
+            Wielded::OneHanded { weapon, shield: _ } => {
+                weapon.unwrap_or_default().powered_staff_type
+            }
+            Wielded::TwoHanded { weapon } => weapon.unwrap_or_default().powered_staff_type,
         }
         .map(|powered_staff| match powered_staff {
             PoweredStaff::StarterStaff => 8.into(),

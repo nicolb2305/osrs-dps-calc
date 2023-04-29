@@ -185,7 +185,7 @@ pub struct Stats {
     pub prayer_bonus: Scalar,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum Wielded<'a> {
     OneHanded {
         weapon: Option<&'a WeaponOneHanded>,

@@ -80,7 +80,7 @@ impl Default for Extra {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Player<'a> {
     pub levels: Levels,
     equipped: Equipped<'a>,
@@ -373,7 +373,7 @@ impl Default for Player<'_> {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize)]
 pub struct Levels {
     pub hitpoints: Scalar,
     pub attack: Scalar,
@@ -398,7 +398,7 @@ impl Default for Levels {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Equipped<'a> {
     pub head: Option<&'a Head>,
     pub cape: Option<&'a Cape>,

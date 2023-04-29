@@ -2,8 +2,8 @@ use serde::Deserialize;
 
 use crate::{
     equipment::{
-        Ammunition, Attribute, Body, Cape, CombatOption, Feet, Hands, Head, Legs, Neck,
-        PoweredStaff, Ring, Shield, Slots, Stats, StyleType, WeaponOneHanded, Wielded,
+        Ammunition, Attribute, Body, Cape, CombatOption, Equipment, Feet, Hands, HasStats, Head,
+        Legs, Neck, PoweredStaff, Ring, Shield, Slots, Stats, StyleType, WeaponOneHanded, Wielded,
     },
     generics::{NamedData, Scalar, Ticks, Tiles, SECONDS_PER_TICK},
     prayers::Prayer,
@@ -453,18 +453,43 @@ impl Callbacks for Vec<Attribute> {
     }
 }
 
+pub struct EquippedIter<'a> {
+    inner: &'a Equipped,
+    index: u8,
+}
+
+impl<'a> Iterator for EquippedIter<'a> {
+    type Item = &'a Equipment;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let ret = match self.index {
+            0 => self.inner.head.inner(),
+            1 => self.inner.cape.inner(),
+            2 => self.inner.neck.inner(),
+            3 => self.inner.ammunition.inner(),
+            4 => self.inner.body.inner(),
+            5 => self.inner.legs.inner(),
+            6 => self.inner.hands.inner(),
+            7 => self.inner.feet.inner(),
+            8 => self.inner.ring.inner(),
+            _ => return None,
+        };
+        self.index += 1;
+        Some(ret)
+    }
+}
+
 impl Equipped {
+    pub fn iter(&self) -> EquippedIter {
+        EquippedIter {
+            inner: self,
+            index: 0,
+        }
+    }
+
     pub fn total_stats(&self) -> Stats {
-        self.head.stats
-            + self.cape.stats
-            + self.neck.stats
-            + self.ammunition.stats
-            + self.wielded.stats()
-            + self.body.stats
-            + self.legs.stats
-            + self.hands.stats
-            + self.feet.stats
-            + self.ring.stats
+        let armour_stats: Stats = self.iter().map(|equipment| equipment.stats).sum();
+        armour_stats + self.wielded.stats()
     }
 
     pub fn accuracy_roll_callback(
@@ -473,67 +498,27 @@ impl Equipped {
         player: &Player,
         enemy: &Enemy,
     ) -> Scalar {
-        value = self
-            .head
-            .attributes
-            .accuracy_roll_callback(value, player, enemy);
-        value = self
-            .cape
-            .attributes
-            .accuracy_roll_callback(value, player, enemy);
-        value = self
-            .neck
-            .attributes
-            .accuracy_roll_callback(value, player, enemy);
-        value = self
-            .ammunition
-            .attributes
-            .accuracy_roll_callback(value, player, enemy);
+        value = self.iter().fold(value, |value, equipent| {
+            equipent
+                .attributes
+                .accuracy_roll_callback(value, player, enemy)
+        });
         value = self
             .wielded
             .attributes()
-            .accuracy_roll_callback(value, player, enemy);
-        value = self
-            .body
-            .attributes
-            .accuracy_roll_callback(value, player, enemy);
-        value = self
-            .legs
-            .attributes
-            .accuracy_roll_callback(value, player, enemy);
-        value = self
-            .hands
-            .attributes
-            .accuracy_roll_callback(value, player, enemy);
-        value = self
-            .feet
-            .attributes
-            .accuracy_roll_callback(value, player, enemy);
-        value = self
-            .ring
-            .attributes
             .accuracy_roll_callback(value, player, enemy);
 
         value
     }
 
     pub fn max_hit_callback(&self, mut value: Scalar, player: &Player, enemy: &Enemy) -> Scalar {
-        value = self.head.attributes.max_hit_callback(value, player, enemy);
-        value = self.cape.attributes.max_hit_callback(value, player, enemy);
-        value = self.neck.attributes.max_hit_callback(value, player, enemy);
-        value = self
-            .ammunition
-            .attributes
-            .max_hit_callback(value, player, enemy);
+        value = self.iter().fold(value, |value, equipent| {
+            equipent.attributes.max_hit_callback(value, player, enemy)
+        });
         value = self
             .wielded
             .attributes()
             .max_hit_callback(value, player, enemy);
-        value = self.body.attributes.max_hit_callback(value, player, enemy);
-        value = self.legs.attributes.max_hit_callback(value, player, enemy);
-        value = self.hands.attributes.max_hit_callback(value, player, enemy);
-        value = self.feet.attributes.max_hit_callback(value, player, enemy);
-        value = self.ring.attributes.max_hit_callback(value, player, enemy);
 
         value
     }

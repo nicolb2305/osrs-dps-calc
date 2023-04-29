@@ -1,7 +1,5 @@
 mod weapon_callbacks;
 
-use std::ops::Add;
-
 use crate::{
     equipment::weapon_callbacks::{
         colossal_blade, dragon_hunter_crossbow_accuracy, dragon_hunter_crossbow_max_hit, identity,
@@ -15,11 +13,7 @@ use serde::Deserialize;
 use self::weapon_callbacks::harmonised_nightmare_staff_attack_speed;
 
 pub trait HasStats: for<'a> Deserialize<'a> {
-    fn name(&self) -> &str;
-    fn attack(&self) -> StatBonuses;
-    fn defence(&self) -> StatBonuses;
-    fn damage(&self) -> DamageBonus;
-    fn prayer_bonus(&self) -> Scalar;
+    fn inner(&self) -> &Equipment;
 }
 
 pub trait IsWeapon {
@@ -84,45 +78,37 @@ impl Attribute {
     }
 }
 
+#[derive(Deserialize, Debug, Clone)]
+pub struct Equipment {
+    pub name: String,
+    #[serde(flatten)]
+    pub stats: Stats,
+    pub attributes: Vec<Attribute>,
+}
+
 macro_rules! equipment_struct {
     ($($struct_name:tt)*) => {
         $(
             #[derive(Deserialize, Debug, Clone)]
             pub struct $struct_name {
-                pub name: String,
                 #[serde(flatten)]
-                pub stats: Stats,
-                pub attributes: Vec<Attribute>,
+                pub inner: Equipment,
             }
 
             impl HasStats for $struct_name {
-                fn name(&self) -> &str {
-                    &self.name
-                }
-
-                fn attack(&self) -> StatBonuses {
-                    self.stats.attack
-                }
-
-                fn defence(&self) -> StatBonuses {
-                    self.stats.defence
-                }
-
-                fn damage(&self) -> DamageBonus {
-                    self.stats.damage
-                }
-
-                fn prayer_bonus(&self) -> Scalar {
-                    self.stats.prayer_bonus
+                fn inner(&self) -> &Equipment {
+                    &self.inner
                 }
             }
 
             impl Default for $struct_name {
                 fn default() -> Self {
                     Self {
-                        name: "Empty".to_owned(),
-                        stats: Stats::default(),
-                        attributes: Vec::default()
+                        inner: Equipment {
+                            name: "Empty".to_owned(),
+                            stats: Stats::default(),
+                            attributes: Vec::default()
+                        }
                     }
                 }
             }
@@ -135,33 +121,15 @@ macro_rules! weapon_struct {
         $(
             #[derive(Deserialize, Debug, Clone)]
             pub struct $struct_name {
-                pub name: String,
                 #[serde(flatten)]
-                pub stats: Stats,
-                pub attributes: Vec<Attribute>,
+                pub inner: Equipment,
                 pub weapon_stats: WeaponStats,
                 pub powered_staff_type: Option<PoweredStaff>
             }
 
             impl HasStats for $struct_name {
-                fn name(&self) -> &str {
-                    &self.name
-                }
-
-                fn attack(&self) -> StatBonuses {
-                    self.stats.attack
-                }
-
-                fn defence(&self) -> StatBonuses {
-                    self.stats.defence
-                }
-
-                fn damage(&self) -> DamageBonus {
-                    self.stats.damage
-                }
-
-                fn prayer_bonus(&self) -> Scalar {
-                    self.stats.prayer_bonus
+                fn inner(&self) -> &Equipment {
+                    &self.inner
                 }
             }
 
@@ -174,9 +142,11 @@ macro_rules! weapon_struct {
             impl Default for $struct_name {
                 fn default() -> Self {
                     Self {
-                        name: "Empty".to_owned(),
-                        stats: Stats::default(),
-                        attributes: Vec::default(),
+                        inner: Equipment {
+                            name: "Empty".to_owned(),
+                            stats: Stats::default(),
+                            attributes: Vec::default(),
+                        },
                         weapon_stats: WeaponStats::default(),
                         powered_staff_type: None,
                     }
@@ -208,25 +178,12 @@ pub enum PoweredStaff {
     BlackSalamander,
 }
 
-#[derive(Debug, Deserialize, Default, Clone, Copy)]
+#[derive(Debug, Deserialize, Default, Clone, Copy, derive_more::Sum, derive_more::Add)]
 pub struct Stats {
     pub attack: StatBonuses,
     pub defence: StatBonuses,
     pub damage: DamageBonus,
     pub prayer_bonus: Scalar,
-}
-
-impl Add for Stats {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self {
-            attack: self.attack + rhs.attack,
-            defence: self.defence + rhs.defence,
-            damage: self.damage + rhs.damage,
-            prayer_bonus: self.prayer_bonus + rhs.prayer_bonus,
-        }
-    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -272,8 +229,8 @@ impl Wielded {
 
     pub fn stats(&self) -> Stats {
         match self {
-            Self::OneHanded { weapon, shield } => weapon.stats + shield.stats,
-            Self::TwoHanded { weapon } => weapon.stats,
+            Self::OneHanded { weapon, shield } => weapon.inner.stats + shield.inner.stats,
+            Self::TwoHanded { weapon } => weapon.inner.stats,
         }
     }
 
@@ -297,8 +254,8 @@ impl Wielded {
 
     pub fn attributes(&self) -> &Vec<Attribute> {
         match self {
-            Self::OneHanded { weapon, shield: _ } => &weapon.attributes,
-            Self::TwoHanded { weapon } => &weapon.attributes,
+            Self::OneHanded { weapon, shield: _ } => &weapon.inner.attributes,
+            Self::TwoHanded { weapon } => &weapon.inner.attributes,
         }
     }
 
@@ -325,119 +282,37 @@ pub enum Slots {
 }
 
 impl HasStats for Slots {
-    fn name(&self) -> &str {
+    fn inner(&self) -> &Equipment {
         match self {
-            Self::Head(v) => v.name(),
-            Self::Cape(v) => v.name(),
-            Self::Neck(v) => v.name(),
-            Self::Ammunition(v) => v.name(),
-            Self::WeaponOneHanded(v) => v.name(),
-            Self::WeaponTwoHanded(v) => v.name(),
-            Self::Shield(v) => v.name(),
-            Self::Body(v) => v.name(),
-            Self::Legs(v) => v.name(),
-            Self::Hands(v) => v.name(),
-            Self::Feet(v) => v.name(),
-            Self::Ring(v) => v.name(),
-        }
-    }
-
-    fn attack(&self) -> StatBonuses {
-        match self {
-            Self::Head(v) => v.attack(),
-            Self::Cape(v) => v.attack(),
-            Self::Neck(v) => v.attack(),
-            Self::Ammunition(v) => v.attack(),
-            Self::WeaponOneHanded(v) => v.attack(),
-            Self::WeaponTwoHanded(v) => v.attack(),
-            Self::Shield(v) => v.attack(),
-            Self::Body(v) => v.attack(),
-            Self::Legs(v) => v.attack(),
-            Self::Hands(v) => v.attack(),
-            Self::Feet(v) => v.attack(),
-            Self::Ring(v) => v.attack(),
-        }
-    }
-
-    fn defence(&self) -> StatBonuses {
-        match self {
-            Self::Head(v) => v.defence(),
-            Self::Cape(v) => v.defence(),
-            Self::Neck(v) => v.defence(),
-            Self::Ammunition(v) => v.defence(),
-            Self::WeaponOneHanded(v) => v.defence(),
-            Self::WeaponTwoHanded(v) => v.defence(),
-            Self::Shield(v) => v.defence(),
-            Self::Body(v) => v.defence(),
-            Self::Legs(v) => v.defence(),
-            Self::Hands(v) => v.defence(),
-            Self::Feet(v) => v.defence(),
-            Self::Ring(v) => v.defence(),
-        }
-    }
-
-    fn damage(&self) -> DamageBonus {
-        match self {
-            Self::Head(v) => v.damage(),
-            Self::Cape(v) => v.damage(),
-            Self::Neck(v) => v.damage(),
-            Self::Ammunition(v) => v.damage(),
-            Self::WeaponOneHanded(v) => v.damage(),
-            Self::WeaponTwoHanded(v) => v.damage(),
-            Self::Shield(v) => v.damage(),
-            Self::Body(v) => v.damage(),
-            Self::Legs(v) => v.damage(),
-            Self::Hands(v) => v.damage(),
-            Self::Feet(v) => v.damage(),
-            Self::Ring(v) => v.damage(),
-        }
-    }
-
-    fn prayer_bonus(&self) -> Scalar {
-        match self {
-            Self::Head(v) => v.prayer_bonus(),
-            Self::Cape(v) => v.prayer_bonus(),
-            Self::Neck(v) => v.prayer_bonus(),
-            Self::Ammunition(v) => v.prayer_bonus(),
-            Self::WeaponOneHanded(v) => v.prayer_bonus(),
-            Self::WeaponTwoHanded(v) => v.prayer_bonus(),
-            Self::Shield(v) => v.prayer_bonus(),
-            Self::Body(v) => v.prayer_bonus(),
-            Self::Legs(v) => v.prayer_bonus(),
-            Self::Hands(v) => v.prayer_bonus(),
-            Self::Feet(v) => v.prayer_bonus(),
-            Self::Ring(v) => v.prayer_bonus(),
+            Self::Head(v) => v.inner(),
+            Self::Cape(v) => v.inner(),
+            Self::Neck(v) => v.inner(),
+            Self::Ammunition(v) => v.inner(),
+            Self::WeaponOneHanded(v) => v.inner(),
+            Self::WeaponTwoHanded(v) => v.inner(),
+            Self::Shield(v) => v.inner(),
+            Self::Body(v) => v.inner(),
+            Self::Legs(v) => v.inner(),
+            Self::Hands(v) => v.inner(),
+            Self::Feet(v) => v.inner(),
+            Self::Ring(v) => v.inner(),
         }
     }
 }
 
 impl NamedData for Slots {
     fn get_name(&self) -> &str {
-        self.name()
+        &self.inner().name
     }
 }
 
-#[derive(Deserialize, Debug, Clone, Copy)]
+#[derive(Deserialize, Debug, Clone, Copy, derive_more::Sum, derive_more::Add)]
 pub struct StatBonuses {
     pub stab: Scalar,
     pub slash: Scalar,
     pub crush: Scalar,
     pub ranged: Scalar,
     pub magic: Scalar,
-}
-
-impl Add for StatBonuses {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self {
-            stab: self.stab + rhs.stab,
-            slash: self.slash + rhs.slash,
-            crush: self.crush + rhs.crush,
-            ranged: self.ranged + rhs.ranged,
-            magic: self.magic + rhs.magic,
-        }
-    }
 }
 
 impl Default for StatBonuses {
@@ -452,23 +327,11 @@ impl Default for StatBonuses {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, Copy)]
+#[derive(Deserialize, Debug, Clone, Copy, derive_more::Sum, derive_more::Add)]
 pub struct DamageBonus {
     pub strength: Scalar,
     pub ranged: Scalar,
     pub magic: Percentage,
-}
-
-impl Add for DamageBonus {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self {
-            strength: self.strength + rhs.strength,
-            ranged: self.ranged + rhs.ranged,
-            magic: self.magic + rhs.magic,
-        }
-    }
 }
 
 impl Default for DamageBonus {

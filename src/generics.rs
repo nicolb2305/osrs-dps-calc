@@ -33,6 +33,7 @@ impl std::ops::Mul<Scalar> for Fraction {
     Default,
     derive_more::From,
     derive_more::Add,
+    derive_more::Sum,
 )]
 pub struct Percentage(i32);
 
@@ -62,6 +63,7 @@ impl std::ops::Mul<Scalar> for Percentage {
     derive_more::SubAssign,
     derive_more::From,
     derive_more::Deref,
+    derive_more::Sum,
 )]
 #[mul(forward)]
 #[div(forward)]

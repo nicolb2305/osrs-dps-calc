@@ -14,6 +14,12 @@ pub struct Fraction {
     pub divisor: i32,
 }
 
+impl Fraction {
+    pub fn new(dividend: i32, divisor: i32) -> Self {
+        Self { dividend, divisor }
+    }
+}
+
 impl std::ops::Mul<Scalar> for Fraction {
     type Output = Scalar;
 

@@ -2,7 +2,7 @@ use crate::generics::{Scalar, Ticks, Tiles};
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Copy)]
 pub enum StyleType {
     Slash,
     #[default]
@@ -11,6 +11,18 @@ pub enum StyleType {
     Ranged,
     Magic,
     None,
+}
+
+impl StyleType {
+    pub fn is_melee(self) -> bool {
+        matches!(self, Self::Crush | Self::Slash | Self::Stab)
+    }
+    pub fn is_ranged(self) -> bool {
+        matches!(self, Self::Ranged)
+    }
+    pub fn is_magic(self) -> bool {
+        matches!(self, Self::Magic)
+    }
 }
 
 #[derive(Debug, Clone, Default)]

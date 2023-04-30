@@ -1,3 +1,5 @@
+#![allow(clippy::needless_update)]
+mod default_items;
 mod weapon_callbacks;
 
 use crate::{
@@ -8,7 +10,6 @@ use crate::{
     generics::{NamedData, Percentage, Scalar, Ticks, Tiles},
     unit::{Enemy, Player},
 };
-use lazy_static::lazy_static;
 use serde::Deserialize;
 
 pub trait HasStats: for<'a> Deserialize<'a> {
@@ -86,7 +87,7 @@ pub struct Equipment {
 }
 
 macro_rules! equipment_struct {
-    ($($struct_name:ident)*) => {
+    ($($struct_name:ident),*) => {
         $(
             #[derive(Deserialize, Debug, Clone)]
             pub struct $struct_name {
@@ -116,7 +117,7 @@ macro_rules! equipment_struct {
 }
 
 macro_rules! weapon_struct {
-    ($($struct_name:ident)*) => {
+    ($($struct_name:ident),*) => {
         $(
             #[derive(Deserialize, Debug, Clone)]
             pub struct $struct_name {
@@ -155,8 +156,8 @@ macro_rules! weapon_struct {
     };
 }
 
-equipment_struct!(Head Cape Neck Ammunition Shield Body Legs Hands Feet Ring);
-weapon_struct!(WeaponOneHanded WeaponTwoHanded);
+equipment_struct!(Head, Cape, Neck, Ammunition, Shield, Body, Legs, Hands, Feet, Ring);
+weapon_struct!(WeaponOneHanded, WeaponTwoHanded);
 
 #[derive(Debug, Deserialize, Clone, Copy)]
 pub enum PoweredStaff {
@@ -235,8 +236,7 @@ impl<'a> Wielded<'a> {
     pub fn stats(&self) -> Stats {
         match self {
             Self::OneHanded { weapon, shield } => {
-                weapon.unwrap_or_default().inner.stats
-                    + shield.unwrap_or(&DEFAULT_ITEM_SHIELD).inner.stats
+                weapon.unwrap_or_default().inner.stats + shield.unwrap_or_default().inner.stats
             }
             Self::TwoHanded { weapon } => weapon.unwrap_or_default().inner.stats,
         }
@@ -511,259 +511,153 @@ pub enum WeaponType {
     Salamander,
 }
 
+macro_rules! create_combat_options {
+    ($(($name:expr, $style_type:ident, $weapon_style:ident)),*) => {
+        {
+            let mut v = Vec::new();
+            $(
+                v.push(CombatOption::new($name, StyleType::$style_type, WeaponStyle::$weapon_style));
+            )*
+            v
+        }
+    };
+}
+
 impl WeaponType {
     #[allow(clippy::too_many_lines)]
     pub fn combat_boost(&self) -> Vec<CombatOption> {
+        #[allow(clippy::vec_init_then_push)]
         match self {
-            Self::TwoHandedSword => vec![
-                CombatOption::new("Chop", StyleType::Slash, WeaponStyle::Accurate),
-                CombatOption::new("Slash", StyleType::Slash, WeaponStyle::Aggressive),
-                CombatOption::new("Smash", StyleType::Crush, WeaponStyle::Aggressive),
-                CombatOption::new("Block", StyleType::Slash, WeaponStyle::Defensive),
-            ],
-            Self::Axe => vec![
-                CombatOption::new("Chop", StyleType::Slash, WeaponStyle::Accurate),
-                CombatOption::new("Hack", StyleType::Slash, WeaponStyle::Aggressive),
-                CombatOption::new("Smash", StyleType::Crush, WeaponStyle::Aggressive),
-                CombatOption::new("Block", StyleType::Slash, WeaponStyle::Defensive),
-            ],
-            Self::Banner => vec![
-                CombatOption::new("Lunge", StyleType::Stab, WeaponStyle::Accurate),
-                CombatOption::new("Swipe", StyleType::Slash, WeaponStyle::Aggressive),
-                CombatOption::new("Pound", StyleType::Crush, WeaponStyle::Controlled),
-                CombatOption::new("Block", StyleType::Stab, WeaponStyle::Defensive),
-            ],
-            Self::Blunt => vec![
-                CombatOption::new("Pound", StyleType::Crush, WeaponStyle::Accurate),
-                CombatOption::new("Pummel", StyleType::Crush, WeaponStyle::Aggressive),
-                CombatOption::new("Block", StyleType::Crush, WeaponStyle::Defensive),
-            ],
-            Self::Bludgeon => vec![
-                CombatOption::new("Pound", StyleType::Crush, WeaponStyle::Aggressive),
-                CombatOption::new("Pummel", StyleType::Crush, WeaponStyle::Aggressive),
-                CombatOption::new("Block", StyleType::Crush, WeaponStyle::Aggressive),
-            ],
-            Self::Bulwark => vec![
-                CombatOption::new("Pummel", StyleType::Crush, WeaponStyle::Accurate),
-                CombatOption::new("Block", StyleType::None, WeaponStyle::None),
-            ],
-            Self::Claw | Self::SlashSword => vec![
-                CombatOption::new("Chop", StyleType::Slash, WeaponStyle::Accurate),
-                CombatOption::new("Slash", StyleType::Slash, WeaponStyle::Aggressive),
-                CombatOption::new("Lunge", StyleType::Stab, WeaponStyle::Controlled),
-                CombatOption::new("Block", StyleType::Slash, WeaponStyle::Defensive),
-            ],
-            Self::Partisan => vec![
-                CombatOption::new("Stab", StyleType::Stab, WeaponStyle::Accurate),
-                CombatOption::new("Lunge", StyleType::Stab, WeaponStyle::Aggressive),
-                CombatOption::new("Pound", StyleType::Crush, WeaponStyle::Aggressive),
-                CombatOption::new("Block", StyleType::Stab, WeaponStyle::Defensive),
-            ],
-            Self::Pickaxe => vec![
-                CombatOption::new("Spike", StyleType::Stab, WeaponStyle::Accurate),
-                CombatOption::new("Impale", StyleType::Stab, WeaponStyle::Aggressive),
-                CombatOption::new("Smash", StyleType::Crush, WeaponStyle::Aggressive),
-                CombatOption::new("Block", StyleType::Stab, WeaponStyle::Defensive),
-            ],
-            Self::Polearm => vec![
-                CombatOption::new("Jab", StyleType::Stab, WeaponStyle::Controlled),
-                CombatOption::new("Swipe", StyleType::Slash, WeaponStyle::Aggressive),
-                CombatOption::new("Fend", StyleType::Stab, WeaponStyle::Defensive),
-            ],
-            Self::Polestaff => vec![
-                CombatOption::new("Bash", StyleType::Crush, WeaponStyle::Accurate),
-                CombatOption::new("Pound", StyleType::Crush, WeaponStyle::Aggressive),
-                CombatOption::new("Block", StyleType::Crush, WeaponStyle::Defensive),
-            ],
-            Self::Scythe => vec![
-                CombatOption::new("Reap", StyleType::Slash, WeaponStyle::Accurate),
-                CombatOption::new("Chop", StyleType::Slash, WeaponStyle::Aggressive),
-                CombatOption::new("Jab", StyleType::Crush, WeaponStyle::Aggressive),
-                CombatOption::new("Block", StyleType::Slash, WeaponStyle::Defensive),
-            ],
-            Self::Spear => vec![
-                CombatOption::new("Lunge", StyleType::Stab, WeaponStyle::Controlled),
-                CombatOption::new("Swipe", StyleType::Slash, WeaponStyle::Controlled),
-                CombatOption::new("Pound", StyleType::Crush, WeaponStyle::Controlled),
-                CombatOption::new("Block", StyleType::Stab, WeaponStyle::Defensive),
-            ],
-            Self::Spiked => vec![
-                CombatOption::new("Pound", StyleType::Crush, WeaponStyle::Accurate),
-                CombatOption::new("Pummel", StyleType::Crush, WeaponStyle::Aggressive),
-                CombatOption::new("Spike", StyleType::Stab, WeaponStyle::Controlled),
-                CombatOption::new("Block", StyleType::Crush, WeaponStyle::Defensive),
-            ],
-            Self::StabSword => vec![
-                CombatOption::new("Stab", StyleType::Stab, WeaponStyle::Accurate),
-                CombatOption::new("Lunge", StyleType::Stab, WeaponStyle::Aggressive),
-                CombatOption::new("Slash", StyleType::Slash, WeaponStyle::Aggressive),
-                CombatOption::new("Block", StyleType::Stab, WeaponStyle::Defensive),
-            ],
-            Self::Unarmed => vec![
-                CombatOption::new("Punch", StyleType::Crush, WeaponStyle::Accurate),
-                CombatOption::new("Kick", StyleType::Crush, WeaponStyle::Aggressive),
-                CombatOption::new("Block", StyleType::Crush, WeaponStyle::Defensive),
-            ],
-            Self::Whip => vec![
-                CombatOption::new("Flick", StyleType::Slash, WeaponStyle::Accurate),
-                CombatOption::new("Lash", StyleType::Slash, WeaponStyle::Controlled),
-                CombatOption::new("Deflect", StyleType::Slash, WeaponStyle::Defensive),
-            ],
-            Self::Bow | Self::Crossbow | Self::Thrown => vec![
-                CombatOption::new("Accurate", StyleType::Ranged, WeaponStyle::Accurate),
-                CombatOption::new("Rapid", StyleType::Ranged, WeaponStyle::Rapid),
-                CombatOption::new("Longrange", StyleType::Ranged, WeaponStyle::Longrange),
-            ],
-            Self::Chinchompa => vec![
-                CombatOption::new("Short fuse", StyleType::Ranged, WeaponStyle::ShortFuse),
-                CombatOption::new("Medium fuse", StyleType::Ranged, WeaponStyle::MediumFuse),
-                CombatOption::new("Long fuse", StyleType::Ranged, WeaponStyle::LongFuse),
-            ],
-            Self::Gun => vec![
-                CombatOption::new("Aim and Fire", StyleType::None, WeaponStyle::None),
-                CombatOption::new("Kick", StyleType::Crush, WeaponStyle::Aggressive),
-            ],
-            Self::BladedStaff => vec![
-                CombatOption::new("Jab", StyleType::Stab, WeaponStyle::Accurate),
-                CombatOption::new("Swipe", StyleType::Slash, WeaponStyle::Aggressive),
-                CombatOption::new("Fend", StyleType::Crush, WeaponStyle::Defensive),
-                CombatOption::new("Spell", StyleType::Magic, WeaponStyle::Autocast),
-                CombatOption::new("Spell", StyleType::Magic, WeaponStyle::DefensiveAutocast),
-            ],
-            Self::PoweredStaff | Self::PoweredWand => vec![
-                CombatOption::new("Accurate", StyleType::Magic, WeaponStyle::Accurate),
-                CombatOption::new("Accurate", StyleType::Magic, WeaponStyle::Accurate),
-                CombatOption::new("Longrange", StyleType::Magic, WeaponStyle::Longrange),
-            ],
-            Self::Staff => vec![
-                CombatOption::new("Bash", StyleType::Crush, WeaponStyle::Accurate),
-                CombatOption::new("Pound", StyleType::Crush, WeaponStyle::Aggressive),
-                CombatOption::new("Focus", StyleType::Crush, WeaponStyle::Defensive),
-                CombatOption::new("Spell", StyleType::Magic, WeaponStyle::Autocast),
-                CombatOption::new("Spell", StyleType::Magic, WeaponStyle::DefensiveAutocast),
-            ],
-            Self::Salamander => vec![
-                CombatOption::new("Scorch", StyleType::Slash, WeaponStyle::Aggressive),
-                CombatOption::new("Flare", StyleType::Ranged, WeaponStyle::Accurate),
-                CombatOption::new("Blaze", StyleType::Magic, WeaponStyle::Defensive),
-            ],
+            Self::TwoHandedSword => create_combat_options!(
+                ("Chop", Slash, Accurate),
+                ("Slash", Slash, Aggressive),
+                ("Smash", Crush, Aggressive),
+                ("Block", Slash, Defensive)
+            ),
+            Self::Axe => create_combat_options!(
+                ("Chop", Slash, Accurate),
+                ("Hack", Slash, Aggressive),
+                ("Smash", Crush, Aggressive),
+                ("Block", Slash, Defensive)
+            ),
+            Self::Banner => create_combat_options!(
+                ("Lunge", Stab, Accurate),
+                ("Swipe", Slash, Aggressive),
+                ("Pound", Crush, Controlled),
+                ("Block", Stab, Defensive)
+            ),
+            Self::Blunt => create_combat_options!(
+                ("Pound", Crush, Accurate),
+                ("Pummel", Crush, Aggressive),
+                ("Block", Crush, Defensive)
+            ),
+            Self::Bludgeon => create_combat_options!(
+                ("Pound", Crush, Aggressive),
+                ("Pummel", Crush, Aggressive),
+                ("Block", Crush, Aggressive)
+            ),
+            Self::Bulwark => {
+                create_combat_options!(("Pummel", Crush, Accurate), ("Block", None, None))
+            }
+            Self::Claw | Self::SlashSword => create_combat_options!(
+                ("Chop", Slash, Accurate),
+                ("Slash", Slash, Aggressive),
+                ("Lunge", Stab, Controlled),
+                ("Block", Slash, Defensive)
+            ),
+            Self::Partisan => create_combat_options!(
+                ("Stab", Stab, Accurate),
+                ("Lunge", Stab, Aggressive),
+                ("Pound", Crush, Aggressive),
+                ("Block", Stab, Defensive)
+            ),
+            Self::Pickaxe => create_combat_options!(
+                ("Spike", Stab, Accurate),
+                ("Impale", Stab, Aggressive),
+                ("Smash", Crush, Aggressive),
+                ("Block", Stab, Defensive)
+            ),
+            Self::Polearm => create_combat_options!(
+                ("Jab", Stab, Controlled),
+                ("Swipe", Slash, Aggressive),
+                ("Fend", Stab, Defensive)
+            ),
+            Self::Polestaff => create_combat_options!(
+                ("Bash", Crush, Accurate),
+                ("Pound", Crush, Aggressive),
+                ("Block", Crush, Defensive)
+            ),
+            Self::Scythe => create_combat_options!(
+                ("Reap", Slash, Accurate),
+                ("Chop", Slash, Aggressive),
+                ("Jab", Crush, Aggressive),
+                ("Block", Slash, Defensive)
+            ),
+            Self::Spear => create_combat_options!(
+                ("Lunge", Stab, Controlled),
+                ("Swipe", Slash, Controlled),
+                ("Pound", Crush, Controlled),
+                ("Block", Stab, Defensive)
+            ),
+            Self::Spiked => create_combat_options!(
+                ("Pound", Crush, Accurate),
+                ("Pummel", Crush, Aggressive),
+                ("Spike", Stab, Controlled),
+                ("Block", Crush, Defensive)
+            ),
+            Self::StabSword => create_combat_options!(
+                ("Stab", Stab, Accurate),
+                ("Lunge", Stab, Aggressive),
+                ("Slash", Slash, Aggressive),
+                ("Block", Stab, Defensive)
+            ),
+            Self::Unarmed => create_combat_options!(
+                ("Punch", Crush, Accurate),
+                ("Kick", Crush, Aggressive),
+                ("Block", Crush, Defensive)
+            ),
+            Self::Whip => create_combat_options!(
+                ("Flick", Slash, Accurate),
+                ("Lash", Slash, Controlled),
+                ("Deflect", Slash, Defensive)
+            ),
+            Self::Bow | Self::Crossbow | Self::Thrown => create_combat_options!(
+                ("Accurate", Ranged, Accurate),
+                ("Rapid", Ranged, Rapid),
+                ("Longrange", Ranged, Longrange)
+            ),
+            Self::Chinchompa => create_combat_options!(
+                ("Short fuse", Ranged, ShortFuse),
+                ("Medium fuse", Ranged, MediumFuse),
+                ("Long fuse", Ranged, LongFuse)
+            ),
+            Self::Gun => {
+                create_combat_options!(("Aim and Fire", None, None), ("Kick", Crush, Aggressive))
+            }
+            Self::BladedStaff => create_combat_options!(
+                ("Jab", Stab, Accurate),
+                ("Swipe", Slash, Aggressive),
+                ("Fend", Crush, Defensive),
+                ("Spell", Magic, Autocast),
+                ("Spell", Magic, DefensiveAutocast)
+            ),
+            Self::PoweredStaff | Self::PoweredWand => create_combat_options!(
+                ("Accurate", Magic, Accurate),
+                ("Accurate", Magic, Accurate),
+                ("Longrange", Magic, Longrange)
+            ),
+            Self::Staff => create_combat_options!(
+                ("Bash", Crush, Accurate),
+                ("Pound", Crush, Aggressive),
+                ("Focus", Crush, Defensive),
+                ("Spell", Magic, Autocast),
+                ("Spell", Magic, DefensiveAutocast)
+            ),
+            Self::Salamander => create_combat_options!(
+                ("Scorch", Slash, Aggressive),
+                ("Flare", Ranged, Accurate),
+                ("Blaze", Magic, Defensive)
+            ),
         }
-    }
-}
-
-lazy_static! {
-    static ref DEFAULT_ITEM_EQUIPMENT: Equipment = Equipment {
-        name: "Empty".to_string(),
-        ..Default::default()
-    };
-    static ref DEFAULT_ITEM_WEAPON_ONE_HANDED: WeaponOneHanded = WeaponOneHanded {
-        inner: DEFAULT_ITEM_EQUIPMENT.clone(),
-        ..Default::default()
-    };
-    static ref DEFAULT_ITEM_WEAPON_TWO_HANDED: WeaponTwoHanded = WeaponTwoHanded {
-        inner: DEFAULT_ITEM_EQUIPMENT.clone(),
-        ..Default::default()
-    };
-    static ref DEFAULT_ITEM_SHIELD: Shield = Shield {
-        inner: DEFAULT_ITEM_EQUIPMENT.clone()
-    };
-    static ref DEFAULT_ITEM_HEAD: Head = Head {
-        inner: DEFAULT_ITEM_EQUIPMENT.clone()
-    };
-    static ref DEFAULT_ITEM_CAPE: Cape = Cape {
-        inner: DEFAULT_ITEM_EQUIPMENT.clone()
-    };
-    static ref DEFAULT_ITEM_NECK: Neck = Neck {
-        inner: DEFAULT_ITEM_EQUIPMENT.clone()
-    };
-    static ref DEFAULT_ITEM_AMMUNITION: Ammunition = Ammunition {
-        inner: DEFAULT_ITEM_EQUIPMENT.clone()
-    };
-    static ref DEFAULT_ITEM_BODY: Body = Body {
-        inner: DEFAULT_ITEM_EQUIPMENT.clone()
-    };
-    static ref DEFAULT_ITEM_LEGS: Legs = Legs {
-        inner: DEFAULT_ITEM_EQUIPMENT.clone()
-    };
-    static ref DEFAULT_ITEM_HANDS: Hands = Hands {
-        inner: DEFAULT_ITEM_EQUIPMENT.clone()
-    };
-    static ref DEFAULT_ITEM_FEET: Feet = Feet {
-        inner: DEFAULT_ITEM_EQUIPMENT.clone()
-    };
-    static ref DEFAULT_ITEM_RING: Ring = Ring {
-        inner: DEFAULT_ITEM_EQUIPMENT.clone()
-    };
-}
-
-impl Default for &WeaponOneHanded {
-    fn default() -> Self {
-        &DEFAULT_ITEM_WEAPON_ONE_HANDED
-    }
-}
-
-impl Default for &WeaponTwoHanded {
-    fn default() -> Self {
-        &DEFAULT_ITEM_WEAPON_TWO_HANDED
-    }
-}
-
-impl Default for &Shield {
-    fn default() -> Self {
-        &DEFAULT_ITEM_SHIELD
-    }
-}
-
-impl Default for &Head {
-    fn default() -> Self {
-        &DEFAULT_ITEM_HEAD
-    }
-}
-
-impl Default for &Cape {
-    fn default() -> Self {
-        &DEFAULT_ITEM_CAPE
-    }
-}
-
-impl Default for &Neck {
-    fn default() -> Self {
-        &DEFAULT_ITEM_NECK
-    }
-}
-
-impl Default for &Ammunition {
-    fn default() -> Self {
-        &DEFAULT_ITEM_AMMUNITION
-    }
-}
-
-impl Default for &Body {
-    fn default() -> Self {
-        &DEFAULT_ITEM_BODY
-    }
-}
-
-impl Default for &Legs {
-    fn default() -> Self {
-        &DEFAULT_ITEM_LEGS
-    }
-}
-
-impl Default for &Hands {
-    fn default() -> Self {
-        &DEFAULT_ITEM_HANDS
-    }
-}
-
-impl Default for &Feet {
-    fn default() -> Self {
-        &DEFAULT_ITEM_FEET
-    }
-}
-
-impl Default for &Ring {
-    fn default() -> Self {
-        &DEFAULT_ITEM_RING
     }
 }

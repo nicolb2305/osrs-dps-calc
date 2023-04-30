@@ -191,7 +191,10 @@ impl<'a> Wielded<'a> {
     }
 
     pub fn attack_speed(&self, combat_style: &CombatOption) -> Ticks {
-        let tick_offset = combat_style.invisible_boost().attack_speed;
+        let tick_offset = combat_style
+            .invisible_boost()
+            .expect("Valid combat style")
+            .attack_speed;
 
         let weapon_attack_speed = match self {
             Self::OneHanded { weapon, shield: _ } => {

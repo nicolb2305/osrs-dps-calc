@@ -1,4 +1,5 @@
 use crate::generics::{Scalar, Ticks, Tiles};
+use anyhow::{anyhow, Result};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Default)]
@@ -29,6 +30,17 @@ pub enum WeaponStyle {
     None,
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct CombatOptionModifier {
+    pub attack: Scalar,
+    pub strength: Scalar,
+    pub defence: Scalar,
+    pub ranged: Scalar,
+    pub magic: Scalar,
+    pub attack_range: Tiles,
+    pub attack_speed: Ticks,
+}
+
 #[derive(Debug, Clone)]
 pub struct CombatOption {
     pub name: String,
@@ -54,22 +66,10 @@ impl CombatOption {
             weapon_style,
         }
     }
-}
 
-#[derive(Debug, Default, Clone, Copy)]
-pub struct CombatOptionModifier {
-    pub attack: Scalar,
-    pub strength: Scalar,
-    pub defence: Scalar,
-    pub ranged: Scalar,
-    pub magic: Scalar,
-    pub attack_range: Tiles,
-    pub attack_speed: Ticks,
-}
-
-impl CombatOption {
-    #[allow(clippy::missing_panics_doc)]
-    pub fn invisible_boost(&self) -> CombatOptionModifier {
+    /// # Errors
+    /// Returns an error if `style_type` and `weapon_style` are incompatible, e.g. Slash, Rapid
+    pub fn invisible_boost(&self) -> Result<CombatOptionModifier> {
         let mut boost = CombatOptionModifier::default();
         match (&self.style_type, &self.weapon_style) {
             (StyleType::Slash | StyleType::Crush | StyleType::Stab, WeaponStyle::Accurate) => {
@@ -103,9 +103,9 @@ impl CombatOption {
             }
             (StyleType::Magic, WeaponStyle::Autocast | WeaponStyle::DefensiveAutocast)
             | (StyleType::None, WeaponStyle::None) => (),
-            _ => unimplemented!(),
+            _ => return Err(anyhow!("Not interested")),
         };
-        boost
+        Ok(boost)
     }
 }
 
@@ -155,7 +155,7 @@ macro_rules! create_combat_options {
 
 impl WeaponType {
     #[allow(clippy::too_many_lines)]
-    pub fn combat_boost(&self) -> Vec<CombatOption> {
+    pub fn combat_boost(self) -> Vec<CombatOption> {
         #[allow(clippy::vec_init_then_push)]
         match self {
             Self::TwoHandedSword => create_combat_options!(

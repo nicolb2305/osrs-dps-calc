@@ -196,7 +196,11 @@ impl<'a> Player<'a> {
 
     pub fn max_melee_accuracy_roll(&self, enemy: &Enemy) -> Scalar {
         let mut effective_attack_level = self.levels.attack * self.prayer_stats().melee_accuracy;
-        effective_attack_level += self.combat_option.invisible_boost().attack;
+        effective_attack_level += self
+            .combat_option
+            .invisible_boost()
+            .expect("Valid combat style")
+            .attack;
         effective_attack_level += 8.into();
 
         let style_bonus = match self.combat_option.style_type {
@@ -217,7 +221,11 @@ impl<'a> Player<'a> {
 
     pub fn max_melee_hit(&self, enemy: &Enemy) -> Scalar {
         let mut effective_strength_level = self.levels.strength * self.prayer_stats().melee_damage;
-        effective_strength_level += self.combat_option.invisible_boost().strength;
+        effective_strength_level += self
+            .combat_option
+            .invisible_boost()
+            .expect("Valid combat style")
+            .strength;
         effective_strength_level += 8.into();
 
         let mut max_hit = (effective_strength_level
@@ -232,7 +240,11 @@ impl<'a> Player<'a> {
 
     pub fn max_ranged_accuracy_roll(&self, enemy: &Enemy) -> Scalar {
         let mut effective_ranged_level = self.levels.ranged * self.prayer_stats().ranged_accuracy;
-        effective_ranged_level += self.combat_option.invisible_boost().ranged;
+        effective_ranged_level += self
+            .combat_option
+            .invisible_boost()
+            .expect("Valid combat style")
+            .ranged;
         effective_ranged_level += 8.into();
 
         let style_bonus = match self.combat_option.style_type {
@@ -251,7 +263,11 @@ impl<'a> Player<'a> {
 
     pub fn max_ranged_hit(&self, enemy: &Enemy) -> Scalar {
         let mut effective_ranged_level = self.levels.ranged * self.prayer_stats().ranged_damage;
-        effective_ranged_level += self.combat_option.invisible_boost().ranged;
+        effective_ranged_level += self
+            .combat_option
+            .invisible_boost()
+            .expect("Valid combat style")
+            .ranged;
         effective_ranged_level += 8.into();
 
         let mut max_hit = (effective_ranged_level
@@ -266,7 +282,11 @@ impl<'a> Player<'a> {
 
     pub fn max_magic_accuracy_roll(&self, enemy: &Enemy) -> Scalar {
         let mut effective_magic_level = self.levels.magic * self.prayer_stats().magic_accuracy;
-        effective_magic_level += self.combat_option.invisible_boost().magic;
+        effective_magic_level += self
+            .combat_option
+            .invisible_boost()
+            .expect("Valid combat style")
+            .magic;
         effective_magic_level += 8.into();
         if self.spell.is_some() {
             effective_magic_level += 1.into();

@@ -1,7 +1,6 @@
 use anyhow::Result;
-use std::collections::HashMap;
-
 use serde::Deserialize;
+use std::collections::HashMap;
 
 pub const SECONDS_PER_TICK: f64 = 0.6;
 

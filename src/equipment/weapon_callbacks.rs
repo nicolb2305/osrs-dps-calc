@@ -1,10 +1,87 @@
-use std::cmp::min;
-
 use crate::{
-    equipment::StyleType,
+    equipment::combat_styles::StyleType,
     generics::{Fraction, Scalar, Ticks},
     unit::{Enemy, Player},
 };
+use serde::Deserialize;
+use std::cmp::min;
+
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq)]
+pub enum Attribute {
+    CrystalArmour,
+    CrystalBow,
+    SalveAmulet,
+    SalveAmuletEnchanted,
+    SalveAmuletImbued,
+    SalveAmuletEnchantedImbued,
+    BlackMask,
+    BlackMaskImbued,
+    VoidArmour,
+    VoidHelmMelee,
+    VoidHelmRanged,
+    VoidHelmMagic,
+    RevenantWeapon,
+    DragonHunterLance,
+    Arclight,
+    KerisPartisan,
+    Blisterwood,
+    TzhaarMeleeWeapon,
+    InquisitorArmour,
+    BarroniteMace,
+    Silverlight,
+    IvandisFlail,
+    LeadBladedBattleaxe,
+    ColossalBlade,
+    TwistedBow,
+    DragonHunterCrossbow,
+    SmokeStaff,
+    HarmonisedNightmareStaff,
+}
+
+impl Attribute {
+    pub fn accuracy_roll_callback(self) -> fn(Scalar, &Player, &Enemy) -> Scalar {
+        match self {
+            Self::DragonHunterCrossbow => dragon_hunter_crossbow_accuracy,
+            Self::SalveAmulet => salve_amulet,
+            _ => identity,
+        }
+    }
+
+    pub fn max_hit_callback(self) -> fn(Scalar, &Player, &Enemy) -> Scalar {
+        match self {
+            Self::DragonHunterCrossbow => dragon_hunter_crossbow_max_hit,
+            Self::SalveAmulet => salve_amulet,
+            Self::ColossalBlade => colossal_blade,
+            _ => identity,
+        }
+    }
+
+    pub fn attack_speed_callback(self) -> fn(Ticks, &Player, &Enemy) -> Ticks {
+        match self {
+            Self::HarmonisedNightmareStaff => harmonised_nightmare_staff_attack_speed,
+            _ => identity,
+        }
+    }
+}
+
+pub trait Callbacks {
+    fn accuracy_roll_callback(&self, value: Scalar, player: &Player, enemy: &Enemy) -> Scalar;
+    fn max_hit_callback(&self, value: Scalar, player: &Player, enemy: &Enemy) -> Scalar;
+}
+
+impl Callbacks for Vec<Attribute> {
+    fn accuracy_roll_callback(&self, value: Scalar, player: &Player, enemy: &Enemy) -> Scalar {
+        self.iter().fold(value, |value, attribute| {
+            (attribute.accuracy_roll_callback())(value, player, enemy)
+        })
+    }
+
+    fn max_hit_callback(&self, value: Scalar, player: &Player, enemy: &Enemy) -> Scalar {
+        self.iter().fold(value, |value, attribute| {
+            (attribute.max_hit_callback())(value, player, enemy)
+        })
+    }
+}
 
 pub(crate) fn identity<T>(value: T, _player: &Player, _enemy: &Enemy) -> T {
     value

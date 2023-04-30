@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use lazy_static::lazy_static;
 use osrs_dps_calc::{
-    equipment::{Slots, StyleType},
+    equipment::{combat_styles::StyleType, Slots},
     generics::read_file,
     prayers::Prayer,
     spells::Spell,

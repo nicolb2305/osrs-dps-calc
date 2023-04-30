@@ -1,11 +1,9 @@
-use lazy_static::lazy_static;
-
-use crate::equipment::Equipment;
-
 use super::{
     Ammunition, Body, Cape, Feet, Hands, Head, Legs, Neck, Ring, Shield, WeaponOneHanded,
     WeaponTwoHanded,
 };
+use crate::equipment::Equipment;
+use lazy_static::lazy_static;
 
 lazy_static! {
     static ref DEFAULT_ITEM_EQUIPMENT: Equipment = Equipment {

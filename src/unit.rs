@@ -2,8 +2,10 @@ use serde::Deserialize;
 
 use crate::{
     equipment::{
-        Ammunition, Attribute, Body, Cape, CombatOption, Equipment, Feet, Hands, HasStats, Head,
-        Legs, Neck, PoweredStaff, Ring, Slots, Stats, StyleType, Wielded,
+        combat_styles::{CombatOption, StyleType},
+        weapon_callbacks::Callbacks,
+        Ammunition, Body, Cape, ContainsEquipment, Equipment, Feet, Hands, Head, Legs, Neck,
+        PoweredStaff, Ring, Slots, Stats, Wielded,
     },
     generics::{NamedData, Scalar, Ticks, Tiles, SECONDS_PER_TICK},
     prayers::Prayer,
@@ -410,25 +412,6 @@ pub struct Equipped<'a> {
     pub hands: Option<&'a Hands>,
     pub feet: Option<&'a Feet>,
     pub ring: Option<&'a Ring>,
-}
-
-trait Callbacks {
-    fn accuracy_roll_callback(&self, value: Scalar, player: &Player, enemy: &Enemy) -> Scalar;
-    fn max_hit_callback(&self, value: Scalar, player: &Player, enemy: &Enemy) -> Scalar;
-}
-
-impl Callbacks for Vec<Attribute> {
-    fn accuracy_roll_callback(&self, value: Scalar, player: &Player, enemy: &Enemy) -> Scalar {
-        self.iter().fold(value, |value, attribute| {
-            (attribute.accuracy_roll_callback())(value, player, enemy)
-        })
-    }
-
-    fn max_hit_callback(&self, value: Scalar, player: &Player, enemy: &Enemy) -> Scalar {
-        self.iter().fold(value, |value, attribute| {
-            (attribute.max_hit_callback())(value, player, enemy)
-        })
-    }
 }
 
 pub struct EquippedIter<'a> {
